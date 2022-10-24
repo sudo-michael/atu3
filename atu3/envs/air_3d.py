@@ -2,8 +2,8 @@ import gym
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from atu3.utils import normalize_angle
-from atu3.brt.brt_air_3d import car_brt
+from atu3.utils import normalize_angle, spa_deriv
+from atu3.brt.brt_air_3d import car_brt, grid
 
 class Air3dEnv(gym.Env):
     metadata = {
@@ -14,13 +14,17 @@ class Air3dEnv(gym.Env):
 
     def __init__(self) -> None:
         self.car = car_brt
-        path = os.path.abspath(__file__)
-        dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, "assets/brts/air3d_brt.npy"))
         self.dt = 0.05
+
         self.action_space = gym.spaces.Box(
-            low=-1 * self.car.we_max, high=self.car.we_max, dtype=np.float32, shape=(1,)
-        )       
+            low=-self.car.we_max, high=self.car.we_max, dtype=np.float32, shape=(1,)
+        )
+        self.observation_space = gym.spaces.Box(
+            low=np.array([-4.5, -4.5, -1, -1, -4.5, -4.5]),
+            high=np.array([4.5, 4.5, 1, 1, 4.5, 4.5]),
+            dtype=np.float32
+        )
+
         
         # state
         self.evader_state = np.array([1, 1, 0])
@@ -34,55 +38,135 @@ class Air3dEnv(gym.Env):
         self.bottom_wall = -4.5
         self.top_wall = 4.5
 
+        self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
+
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
+        path = os.path.abspath(__file__)
+        dir_path = os.path.dirname(path)
+        self.brt = np.load(os.path.join(dir_path, "assets/brts/air3d_brt.npy"))
+        self.grid = grid
+
     def step(self, action):
-        self.evader_state = (
-            self.dynamics.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
-            * self.dt
-            + self.evader_state
-        )
+        # TODO change to odeint
+        # self.evader_state = (
+        #     self.car.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
+        #     * self.dt
+        #     + self.evader_state
+        # )
+        # self.evader_state[2] = normalize_angle(self.evader_state[2])
         self.persuer_state = (
-            self.dynamics.dynamics_non_hcl(0, self.persuer_state, -action, is_evader=False)
+            self.car.dynamics_non_hcl(0, self.persuer_state, self.opt_dstb(), is_evader=False)
             * self.dt
             + self.persuer_state
         )
+        self.persuer_state[2] = normalize_angle(self.persuer_state[2])
 
+        reward = -np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         done = False
+        info = {}
+        info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
+        info["cost"] = 0
+        info["safe"] = True
 
-        if (
-            np.linalg.norm(
-                self.relative_state(self.persuer_state, self.evader_state)[:2]
-            )
-            <= 0.5
-        ):
+        if not self.in_bounds(self.evader_state):
             done = True
+            info["safe"] = False
+            info["collision"] = "wall"
+            info["cost"] = 1
+        elif self.near_persuer(self.evader_state, self.persuer_state):
+            done = True
+            info["safe"] = False
+            info["collision"] = "persuer"
+            info["cost"] = 1
+        elif self.near_goal(self.evader_state, self.goal_location):
+            done = True
+            info["collision"] = 'goal'
+            info['steps_to_goal'] = self.t - self.last_t_at_goal
+            self.last_t_at_goal = self.t
+            reward = 100
+            # self.generate_new_goal_location(self.evader_state)
 
-        return (
-            {
-                "persuer_state": np.copy(self.persuer_state),
-                "evader_state": np.copy(self.evader_state),
-                "goal_location": np.copy(self.goal_location),
-            },
-            0,
-            done,
-            {},
-        )
+        info['obs'] = np.copy(self.theta_to_cos_sin(self.evader_state))
+        info['goal'] = np.copy(self.goal_location[:2])
+
+        return np.copy(np.concatenate((info['obs'], info['goal']))), reward, done, info
 
     def reset(self, seed=None):
-        def dynamics_to_obs(state):
-            return np.array([state[0], state[1], np.cos(state[2]), np.sin(state[2])])
+        while True:
+            self.goal_location = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
 
-        # TODO
-        return None
+            if self.grid.get_value(self.brt, self.goal_location) > 0.3:
+                break
+
+        while True:
+            self.evader_state = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
+
+            if self.grid.get_value(
+                self.brt, self.evader_state
+            ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
+                break
+
+        # self.evader_state = np.array([0, 0, 0])
+        # self.persuer_state = np.array([2, 2, -np.pi])
+        self.evader_state = np.array([0, 0, 0])
+        self.persuer_state = np.array([-2, 0, 0])
+        info = {
+            "obs": np.copy(self.theta_to_cos_sin(self.evader_state)),
+            "goal": np.copy(self.goal_location[:2]),
+            "brt_value": self.grid.get_value(self.brt, self.evader_state)
+        }
+        return np.copy(np.concatenate((info['obs'], info['goal']))), info
+
+    def generate_new_goal_location(self, evader_state):
+        while True:
+            self.goal_location = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
+
+            if self.grid.get_value(
+                self.brt, self.goal_location
+            ) > 0.3 and not self.near_goal(evader_state, self.goal_location):
+                break
+
+    def in_bounds(self, evader_state):
+        if not (
+            self.left_wall + self.car.r
+            <= evader_state[0]
+            <= self.right_wall - self.car.r
+        ):
+            return False
+        elif not (
+            self.bottom_wall + self.car.r
+            <= evader_state[1]
+            <= self.top_wall - self.car.r
+        ):
+            return False
+        return True
+
+    def near_goal(self, evader_state, goal_state):
+        # r of goal == self.car.r
+        return (
+            np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.car.r + self.car.r
+        )
+
+    def near_persuer(self, evader_state, persuer_state):
+        return (
+            np.linalg.norm(evader_state[:2] - persuer_state[:2])
+            <= self.car.r + self.car.r
+        )
 
     def render(self, mode="human"):
         self.ax.clear()
 
         def add_robot(state, color="green"):
-            self.ax.add_patch(plt.Circle(state[:2], radius=self.dynamics.r, color=color))
+            self.ax.add_patch(plt.Circle(state[:2], radius=self.car.r, color=color))
 
-            dir = state[:2] + self.dynamics.r * np.array(
+            dir = state[:2] + self.car.r * np.array(
                 [np.cos(state[2]), np.sin(state[2])]
             )
 
@@ -91,13 +175,38 @@ class Air3dEnv(gym.Env):
         add_robot(self.evader_state, color="blue")
         add_robot(self.persuer_state, color="red")
         goal = plt.Circle(
-            self.goal_location[:2], radius=self.goal_location[2], color="g"
+            self.goal_location[:2], radius=self.car.r, color="g"
         )
         self.ax.add_patch(goal)
 
         # walls
         self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
         self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
+
+        X, Y = np.meshgrid(
+            np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
+            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
+            indexing="ij",
+        )
+
+        relative_state = self.relative_state(self.persuer_state, self.evader_state)
+        index = self.grid.get_index(relative_state)
+        angle = -self.evader_state[2]
+        Xr = X * np.cos(angle) - Y * np.sin(angle)
+        Yr = X * np.sin(angle) + Y * np.cos(angle)
+
+        self.ax.contour(
+            Xr + self.evader_state[0],
+            Yr + self.evader_state[1],
+            self.brt[:, :, index[2]],
+            # levels=[0.1],
+        )
+        # self.ax.contour(
+        #     X,
+        #     Y,
+        #     self.brt[:, :, index[2]],
+        #     levels=[0.1],
+        # )
 
         self.ax.set_xlim(-5, 5)
         self.ax.set_ylim(-5, 5)
@@ -112,8 +221,7 @@ class Air3dEnv(gym.Env):
 
         if mode == "human":
             self.fig.canvas.flush_events()
-            # plt.pause(1 / self.metadata["render_fps"])
-            plt.show()
+            plt.pause(1 / self.metadata["render_fps"])
         return img
 
     def close(self):
@@ -125,6 +233,8 @@ class Air3dEnv(gym.Env):
         rotated_relative_state = np.zeros(3)
         relative_state = persuer_state - evader_state
         angle = -evader_state[2]       
+        # print(f"{relative_state=} {angle=}")
+        # print(np.cos(angle), np.sin(angle))
 
         # fmt: off
         rotated_relative_state[0] = relative_state[0] * np.cos(angle) - relative_state[1] * np.sin(angle)
@@ -132,8 +242,34 @@ class Air3dEnv(gym.Env):
         # fmt: on
 
         # after rotating by -evader_state[2], the relative angle will still be the same
-        rotated_relative_state[2] = self.normalize_angle(relative_state[2])
+        print(f"p: {persuer_state}, e: {evader_state}")
+        rotated_relative_state[2] = normalize_angle(relative_state[2])
         return rotated_relative_state
+
+    def use_opt_ctrl(self, threshold=0.1):
+        return self.grid.get_value(self.brt, self.relative_state(self.persuer_state, self.evader_state)) < threshold
+
+    def opt_ctrl(self):
+        assert -np.pi <= self.evader_state[2] <= np.pi
+        relative_state = self.relative_state(self.persuer_state, self.evader_state)
+        index = self.grid.get_index(relative_state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid)
+        opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
+        return opt_ctrl
+    
+    def opt_dstb(self):
+        relative_state = self.relative_state(self.persuer_state, self.evader_state)
+        index = self.grid.get_index(relative_state)
+        spat_deriv = spa_deriv(index, self.brt, self.grid)
+        print(f"opt dstb: {spat_deriv=} value: {self.grid.get_value(self.brt, relative_state)}")
+        opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
+        return opt_dstb
+        
+
+    def theta_to_cos_sin(self, state):
+        return np.array(
+            [state[0], state[1], np.cos(state[2]), np.sin(state[2])], dtype=np.float32
+        )
 
 
 if __name__ in "__main__":
@@ -142,11 +278,19 @@ if __name__ in "__main__":
     env = gym.make("Safe-Air3d-v0")
     obs = env.reset()
     for _ in range(200):
-        action = env.action_space.sample()
+        if env.use_opt_ctrl():
+            print("using opt ctrl")
+            action = env.opt_ctrl()
+        else:
+            # action = np.array([0])
+            action = env.action_space.sample()
+        _, _, _, info = env.step(action)
+
         obs, reward, done, info = env.step(action)
         if done:
             print("done")
             break
         env.render()
+
 
 

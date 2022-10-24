@@ -1,11 +1,11 @@
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
-from atu.utils import normalize_angle, spa_deriv
+from atu3.utils import normalize_angle, spa_deriv
 import os
-from atu.brt.brt_static_obstacle_3d import g as grid
-from atu.brt.brt_static_obstacle_3d import car_brt
-from atu.brt.brt_static_obstacle_3d import cylinder_r
+from atu3.brt.brt_static_obstacle_3d import g as grid
+from atu3.brt.brt_static_obstacle_3d import car_brt
+from atu3.brt.brt_static_obstacle_3d import cylinder_r
 from scipy.integrate import odeint
 
 

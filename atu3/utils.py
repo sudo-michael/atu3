@@ -2,6 +2,7 @@ import numpy as np
 import gym
 def normalize_angle(theta):
     """normalize theta to be in range (-pi, pi]"""
+    print(f"{theta=}, deg: {theta / np.pi * 180}")
     return ((-theta + np.pi) % (2.0 * np.pi) - np.pi) * -1.0
 
 class AutoResetWrapper(gym.Wrapper):
@@ -100,13 +101,16 @@ def spa_deriv(index, V, g):
                 right_boundary = V[right_periodic_boundary_index]
             else:
                 right_boundary = V[index] + np.abs(V[index] - V[prev_index]) * np.sign(
-                    [V[index]]
+                    V[index]
                 )
             left_deriv = (V[index] - V[prev_index]) / g.dx[dim]
             right_deriv = (right_boundary - V[index]) / g.dx[dim]
         else:
             left_deriv = (V[index] - V[prev_index]) / g.dx[dim]
             right_deriv = (V[next_index] - V[index]) / g.dx[dim]
+
+        if dim==2:
+            breakpoint()
 
         spa_derivatives.append((left_deriv + right_deriv) / 2)
 

@@ -1,6 +1,5 @@
 import heterocl as hcl
 import numpy as np
-import random
 
 
 class Air3D:
@@ -19,6 +18,9 @@ class Air3D:
         opt_we = hcl.scalar(self.we_max, "opt_we")
         in2 = hcl.scalar(0, "in2")
         in3 = hcl.scalar(0, "in3")
+        in4 = hcl.scalar(0, "in4")
+        in5 = hcl.scalar(0, "in5")
+        in6 = hcl.scalar(0, "in6")
 
         det = hcl.scalar(0, "det")
         det[0] = spat_deriv[0] * state[1] - spat_deriv[1] * state[0] - spat_deriv[2]
@@ -28,55 +30,34 @@ class Air3D:
                 opt_we[0] = self.we_max
             with hcl.else_():
                 opt_we[0] = -1 * self.we_max
-            # with hcl.if_(det[0] > 0):
-            #     opt_we[0] = self.we_max
-            # with hcl.elif_(det[0] < 0):
-            #     opt_we[0] = -1 * self.we_max
-            # with hcl.else_():
-            #     opt_we[0] = 0.0
         with hcl.else_():
             with hcl.if_(det[0] >= 0):
                 opt_we[0] = -1 * self.we_max
             with hcl.else_():
                 opt_we[0] = self.we_max
-            # with hcl.if_(det[0] > 0):
-            #     opt_we[0] = -1 * self.we_max
-            # with hcl.elif_(det[0] < 0):
-            #     opt_we[0] = self.we_max
-            # with hcl.else_():
-            #     opt_we[0] = 0.0
 
-        return opt_we, in2, in3
+        return opt_we, in2, in3, in4, in5, in6
 
     def opt_dstb(self, t, state, spat_deriv):
         opt_wp = hcl.scalar(self.wp_max, "opt_wp")
         in2 = hcl.scalar(0, "in2")
         in3 = hcl.scalar(0, "in3")
+        in4 = hcl.scalar(0, "in4")
+        in5 = hcl.scalar(0, "in5")
+        in6 = hcl.scalar(0, "in6")
 
         with hcl.if_(self.d_mode == "max"):
             with hcl.if_(spat_deriv[2] >= 0):
                 opt_wp[0] = self.wp_max
             with hcl.else_():
                 opt_wp[0] = -1 * self.wp_max
-            # with hcl.if_(spat_deriv[2] > 0):
-            #     opt_wp[0] = self.wp_max
-            # with hcl.elif_(spat_deriv[2] < 0):
-            #     opt_wp[0] = -1 * self.wp_max
-            # with hcl.else_():
-            #     opt_wp[0] = 0.0
         with hcl.else_():
             with hcl.if_(spat_deriv[2] >= 0):
                 opt_wp[0] = -1 * self.wp_max
             with hcl.else_():
                 opt_wp[0] = self.wp_max
-            # with hcl.if_(spat_deriv[2] > 0):
-            #     opt_wp[0] = -1 * self.wp_max
-            # with hcl.elif_(spat_deriv[2] < 0):
-            #     opt_wp[0] = self.wp_max
-            # with hcl.else_():
-            #     opt_wp[0] = 0.0
 
-        return opt_wp, in2, in3
+        return opt_wp, in2, in3, in4, in5, in6
 
     def dynamics(self, t, state, u_opt, d_opt):
         # u_opt[0] = omega_e
@@ -84,12 +65,19 @@ class Air3D:
         x1_dot = hcl.scalar(0, "x1_dot")
         x2_dot = hcl.scalar(0, "x2_dot")
         x3_dot = hcl.scalar(0, "x3_dot")
+        x4_dot = hcl.scalar(0, "x4_dot")
+        x5_dot = hcl.scalar(0, "x5_dot")
+        x6_dot = hcl.scalar(0, "x6_dot")
 
         x1_dot[0] = -self.ve + self.vp * hcl.cos(state[2]) + u_opt[0] * state[1]
         x2_dot[0] = self.vp * hcl.sin(state[2]) - u_opt[0] * state[0]
         x3_dot[0] = d_opt[0] - u_opt[0]
 
-        return x1_dot, x2_dot, x3_dot
+        x4_dot[0] = self.ve * hcl.cos(state[5])
+        x5_dot[0] = self.ve * hcl.sin(state[5])
+        x6_dot[0] = u_opt[0]
+
+        return x1_dot, x2_dot, x3_dot, x4_dot, x5_dot, x6_dot
 
     def opt_ctrl_non_hcl(self, state, spat_deriv):
         opt_we = 0
@@ -115,7 +103,6 @@ class Air3D:
             else:
                 opt_wp = -1 * self.wp_max
         else:
-            # TODO
             if spat_deriv[2] >= 0:
                 opt_wp = -1 * self.wp_max
             else:
@@ -128,5 +115,10 @@ class Air3D:
         x_dot = v * np.cos(state[2])
         y_dot = v * np.sin(state[2])
         theta_dot = ctrl[0]
-        return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
+
+        xe_dot = v * np.cos(state[5])
+        ye_dot = v * np.cos(state[5])
+        thetae_dot = ctrl[0] 
+        
+        return np.array([x_dot, y_dot, theta_dot, xe_dot, ye_dot, thetae_dot], dtype=np.float32)
 

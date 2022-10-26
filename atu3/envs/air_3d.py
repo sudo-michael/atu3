@@ -45,16 +45,18 @@ class Air3dEnv(gym.Env):
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
         self.brt = np.load(os.path.join(dir_path, "assets/brts/air3d_brt.npy"))
+        self.backup_brt = np.load(os.path.join(dir_path, "assets/brts/backup_air3d_brt.npy"))
+
         self.grid = grid
 
     def step(self, action):
         # TODO change to odeint
-        # self.evader_state = (
-        #     self.car.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
-        #     * self.dt
-        #     + self.evader_state
-        # )
-        # self.evader_state[2] = normalize_angle(self.evader_state[2])
+        self.evader_state = (
+            self.car.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
+            * self.dt
+            + self.evader_state
+        )
+        self.evader_state[2] = normalize_angle(self.evader_state[2])
         self.persuer_state = (
             self.car.dynamics_non_hcl(0, self.persuer_state, self.opt_dstb(), is_evader=False)
             * self.dt
@@ -75,6 +77,9 @@ class Air3dEnv(gym.Env):
             info["collision"] = "wall"
             info["cost"] = 1
         elif self.near_persuer(self.evader_state, self.persuer_state):
+            print(f"{self.evader_state=}")
+            print(f"{self.persuer_state=}")
+            print(self.relative_state(self.persuer_state, self.evader_state))
             done = True
             info["safe"] = False
             info["collision"] = "persuer"
@@ -113,8 +118,26 @@ class Air3dEnv(gym.Env):
 
         # self.evader_state = np.array([0, 0, 0])
         # self.persuer_state = np.array([2, 2, -np.pi])
-        self.evader_state = np.array([0, 0, 0])
-        self.persuer_state = np.array([-2, 0, 0])
+        # self.evader_state = np.array([0, 0, 0])
+        # self.persuer_state = np.array([-2, 0, 0])
+        # self.evader_state = np.array([0, 0, 0.68])
+        # self.persuer_state = np.array([2, 2, -0.30])
+        # self.evader_state = np.array([0, 0, -np.pi/2])
+        # self.persuer_state = np.array([0, -2, np.pi/2])
+        # self.evader_state = np.array([0, 0, np.pi/2])
+        # self.persuer_state = np.array([0, 2, -np.pi/2])
+        # self.evader_state = np.array([-3, -3, np.pi/4])
+        # self.persuer_state = np.array([2, 2, -np.pi])
+        # NOT WORKING
+        # self.evader_state = np.array([0, 0, -np.pi/2 * 3])
+        # self.persuer_state = np.array([-1, -3, -np.pi/4])
+        # self.evader_state = np.array([0, 0, 0])
+        # self.persuer_state = np.array([-1, -1, -3 * np.pi/4])
+        # self.persuer_state = np.array([-1, 0, np.pi])
+        self.evader_state = np.array([0, 0, np.pi/4])
+        # self.persuer_state = np.array([-1.2, 0, -np.pi/4])
+        self.persuer_state = np.array([-1.2, -1.2, -np.pi/2])
+        # self.persuer_state = np.array([-1.2, 1.2, -np.pi/2])
         info = {
             "obs": np.copy(self.theta_to_cos_sin(self.evader_state)),
             "goal": np.copy(self.goal_location[:2]),
@@ -191,7 +214,7 @@ class Air3dEnv(gym.Env):
 
         relative_state = self.relative_state(self.persuer_state, self.evader_state)
         index = self.grid.get_index(relative_state)
-        angle = -self.evader_state[2]
+        angle = (self.evader_state[2] % (2 * np.pi))
         Xr = X * np.cos(angle) - Y * np.sin(angle)
         Yr = X * np.sin(angle) + Y * np.cos(angle)
 
@@ -199,7 +222,7 @@ class Air3dEnv(gym.Env):
             Xr + self.evader_state[0],
             Yr + self.evader_state[1],
             self.brt[:, :, index[2]],
-            # levels=[0.1],
+            levels=[0.1],
         )
         # self.ax.contour(
         #     X,
@@ -222,6 +245,7 @@ class Air3dEnv(gym.Env):
         if mode == "human":
             self.fig.canvas.flush_events()
             plt.pause(1 / self.metadata["render_fps"])
+            # plt.show()
         return img
 
     def close(self):
@@ -229,28 +253,34 @@ class Air3dEnv(gym.Env):
         return
 
     def relative_state(self, persuer_state, evader_state):
-        # brt assume that evader_state is at theta=0
         rotated_relative_state = np.zeros(3)
         relative_state = persuer_state - evader_state
-        angle = -evader_state[2]       
-        # print(f"{relative_state=} {angle=}")
-        # print(np.cos(angle), np.sin(angle))
+
+        angle = -evader_state[2]
 
         # fmt: off
+        # brt assume that evader_state is at theta=0
         rotated_relative_state[0] = relative_state[0] * np.cos(angle) - relative_state[1] * np.sin(angle)
         rotated_relative_state[1] = relative_state[0] * np.sin(angle) + relative_state[1] * np.cos(angle)
         # fmt: on
 
         # after rotating by -evader_state[2], the relative angle will still be the same
-        print(f"p: {persuer_state}, e: {evader_state}")
+        # rotated_relative_state[0] = np.abs(rotated_relative_state[0])
+        # rotated_relative_state[1] = np.abs(rotated_relative_state[1])
         rotated_relative_state[2] = normalize_angle(relative_state[2])
         return rotated_relative_state
 
-    def use_opt_ctrl(self, threshold=0.1):
+    def relative_state2(self, persuer_state, evader_state):
+        # backup relative state for backup brt when dV/dtheta == 0
+        relative_state = persuer_state - evader_state
+        relative_state[2] = persuer_state[2]
+        return relative_state
+
+    def use_opt_ctrl(self, threshold=0.2):
         return self.grid.get_value(self.brt, self.relative_state(self.persuer_state, self.evader_state)) < threshold
 
     def opt_ctrl(self):
-        assert -np.pi <= self.evader_state[2] <= np.pi
+        # assert -np.pi <= self.evader_state[2] <= np.pi
         relative_state = self.relative_state(self.persuer_state, self.evader_state)
         index = self.grid.get_index(relative_state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
@@ -261,7 +291,13 @@ class Air3dEnv(gym.Env):
         relative_state = self.relative_state(self.persuer_state, self.evader_state)
         index = self.grid.get_index(relative_state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
-        print(f"opt dstb: {spat_deriv=} value: {self.grid.get_value(self.brt, relative_state)}")
+        if spat_deriv[2] == 0:
+            print('using backup brt')
+            relative_state = self.relative_state2(self.persuer_state, self.evader_state)
+            index = self.grid.get_index(relative_state)
+            spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
+        else:
+            print('using normal brt')
         opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
         return opt_dstb
         
@@ -282,8 +318,8 @@ if __name__ in "__main__":
             print("using opt ctrl")
             action = env.opt_ctrl()
         else:
-            # action = np.array([0])
-            action = env.action_space.sample()
+            action = np.array([1.5])
+            # action = env.action_space.sample()
         _, _, _, info = env.step(action)
 
         obs, reward, done, info = env.step(action)

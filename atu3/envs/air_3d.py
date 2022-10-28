@@ -4,6 +4,15 @@ import matplotlib.pyplot as plt
 import os
 from atu3.utils import normalize_angle, spa_deriv
 from atu3.brt.brt_air_3d import car_brt, grid
+import torch
+
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../../siren-reach'))
+
+# siren-reach
+import modules
+from modules import Sine
+
 
 class Air3dEnv(gym.Env):
     metadata = {

@@ -97,6 +97,7 @@ class Air3dEnv(gym.Env):
             info["safe"] = False
             info["collision"] = "persuer"
             info["cost"] = 1
+            reward = -250
         elif self.near_goal(self.evader_state, self.goal_location):
             done = True
             info["collision"] = 'goal'
@@ -114,15 +115,20 @@ class Air3dEnv(gym.Env):
         if self.fixed_goal:
             self.goal_location = np.array([2.5, 2.5])
         else:
-            while True:
-                    self.goal_location = np.random.uniform(
-                        low=-self.world_boundary, high=self.world_boundary
-                    )
+            goal_bounds = np.array([2.5, 2.5])
+            self.goal_location = np.random.uniform(
+                low=-goal_bounds, high=goal_bounds
+            )
 
-                    if self.grid.get_value(self.brt, self.goal_location) > 0.3:
-                        break
+        while True:
+            self.persuer_state = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
 
-        self.persuer_state = np.array([2, 0, -np.pi])
+            if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
+                break
+            
+
         if self.fixed_goal:
             while True:
                 # choose to be "close" ish to goal
@@ -199,11 +205,16 @@ class Air3dEnv(gym.Env):
             return False
         return True
 
-    def near_goal(self, evader_state, goal_state):
+    def near_goal(self, evader_state, goal_state, tol=None):
         # r of goal == self.car.r
-        return (
-            np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.car.r + self.car.r
-        )
+        if tol == None:
+            return (
+                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.car.r + self.car.r
+            )
+        else:
+            return (
+                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= tol
+            )
 
     def near_persuer(self, evader_state, persuer_state):
         return (
@@ -335,11 +346,21 @@ class Air3dEnv(gym.Env):
 
 if __name__ in "__main__":
     import atu3
+    from datetime import datetime
 
-    env = gym.make("Safe-Air3d-Fixed-v0")
+    run_name = (
+        f"debug__{datetime.today().strftime('%Y-%m-%d-%H:%M:%S')}"
+    )
+
+    gym.logger.set_level(10)
+
+    env = gym.make("Safe-Air3d-v0")
+    # env = gym.wrappers.TimeLimit(env, 100)
+    # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")
     obs = env.reset()
-    for _ in range(200):
+    done = False
+    while not done:
         if env.use_opt_ctrl():
             print("using opt ctrl")
             action = env.opt_ctrl()
@@ -350,9 +371,13 @@ if __name__ in "__main__":
 
         obs, reward, done, info = env.step(action)
         if done:
+            print(info)
             print("done")
             break
+
         env.render()
+    env.close()
+
 
 
 

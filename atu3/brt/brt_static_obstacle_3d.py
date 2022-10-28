@@ -26,6 +26,8 @@ if __name__ in "__main__":
         ivf,
         Union(
             Lower_Half_Space(g, 0, -4.5 + car_r), Upper_Half_Space(g, 0, 4.5 - car_r + extra_room)
+
+            
         ),
     )
 

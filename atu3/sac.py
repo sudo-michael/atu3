@@ -14,8 +14,8 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
-import atu
-from atu.utils import AutoResetWrapper
+import atu3
+from atu3.utils import AutoResetWrapper
 
 def parse_args():
     # fmt: off
@@ -32,23 +32,23 @@ def parse_args():
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="atu3",
         help="the wandb's project name")
-    parser.add_argument("--wandb-entity", type=str, default=None,
+    parser.add_argument("--wandb-entity", type=str, default="atu3",
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-StaticObstacle3d-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-Fixed-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=int(1e6),
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.9,
+    parser.add_argument("--gamma", type=float, default=0.95,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
-    parser.add_argument("--batch-size", type=int, default=256,
+    parser.add_argument("--batch-size", type=int, default=2048,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
@@ -68,6 +68,9 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+
+    parser.add_argument("--reward-shape-hj-takeover", type=float, default=9.4069,
+        help="reward pentalty for hj takeover")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -81,7 +84,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
     if capture_video:
         if idx == 0:
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-    env = atu.utils.AutoResetWrapper(env)
+    env = atu3.utils.AutoResetWrapper(env)
     env.seed(seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
@@ -238,11 +241,11 @@ if __name__ == "__main__":
         total_unsafe += not info.get('safe', True)
 
         if used_hj:
-            rewards -= 10
+            rewards -= args.reward_shape_hj_takeover
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "episode" in info.get('terminal_info', {}).keys():
-            print(f"global_step={global_step}, episodic_return={info['terminal_info']['episode']['r']}")
+            print(f"global_step={global_step}, episodic_return={info['terminal_info']['episode']['r']} collision={info['terminal_info'].get('collision', 'timeout')}")
             writer.add_scalar("charts/episodic_return", info['terminal_info']["episode"]["r"], global_step)
             writer.add_scalar("charts/episodic_length", info['terminal_info']["episode"]["l"], global_step)
             writer.add_scalar("charts/total_hj", total_use_hj, global_step)

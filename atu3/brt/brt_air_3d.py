@@ -17,7 +17,7 @@ car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=
 
 persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.ve)
 
-cylinder_r = car_r + car_r + 0.1
+cylinder_r = car_r + car_r + 0.2
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *

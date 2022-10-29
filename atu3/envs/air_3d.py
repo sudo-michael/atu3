@@ -10,8 +10,8 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../../siren-reach'))
 
 # siren-reach
-import modules
-from modules import Sine
+#import modules
+#from modules import Sine
 
 
 class Air3dEnv(gym.Env):
@@ -46,8 +46,8 @@ class Air3dEnv(gym.Env):
             self.top_wall = 4.5
         else:
             self.observation_space = gym.spaces.Box(
-                low=np.array([-10, -10, -np.pi, -np.pi -10, -10]),
-                high=np.array([10, 10, np.pi, np.pi, 10, 10]),
+                low=np.array([-10, -10, -1, -1, -10, -10]),
+                high=np.array([10, 10, 1, 1, 10, 10]),
                 dtype=np.float32
             )
             self.world_width = 10
@@ -262,8 +262,9 @@ class Air3dEnv(gym.Env):
         self.ax.add_patch(goal)
 
         # walls
-        self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
-        self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
+        if self.walls:
+            self.ax.hlines(y=[-4.5, 4.5], xmin=[-4.5, -4.5], xmax=[4.5, 4.5], color="k")
+            self.ax.vlines(x=[-4.5, 4.5], ymin=[-4.5, -4.5], ymax=[4.5, 4.5], color="k")
 
         X, Y = np.meshgrid(
             np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
@@ -290,8 +291,12 @@ class Air3dEnv(gym.Env):
         #     levels=[0.1],
         # )
 
-        self.ax.set_xlim(-5, 5)
-        self.ax.set_ylim(-5, 5)
+        if self.walls:
+            self.ax.set_xlim(-5, 5)
+            self.ax.set_ylim(-5, 5)
+        else:
+            self.ax.set_xlim(-10, 10)
+            self.ax.set_ylim(-10, 10)
         self.ax.set_aspect("equal")
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")
@@ -380,7 +385,7 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = gym.make("Safe-Air3d-v0")
+    env = gym.make("Safe-Air3d-NoWalls-v0")
     # env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")

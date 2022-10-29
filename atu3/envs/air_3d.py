@@ -21,32 +21,46 @@ class Air3dEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal) -> None:
+    def __init__(self, fixed_goal, walls) -> None:
         self.fixed_goal = fixed_goal
+        self.walls=walls
         self.car = car_brt
         self.dt = 0.05
 
         self.action_space = gym.spaces.Box(
             low=-self.car.we_max, high=self.car.we_max, dtype=np.float32, shape=(1,)
         )
-        self.observation_space = gym.spaces.Box(
-            low=np.array([-4.5, -4.5, -1, -1, -4.5, -4.5]),
-            high=np.array([4.5, 4.5, 1, 1, 4.5, 4.5]),
-            dtype=np.float32
-        )
 
+        if self.walls:
+            self.observation_space = gym.spaces.Box(
+                low=np.array([-4.5, -4.5, -1, -1, -4.5, -4.5]),
+                high=np.array([4.5, 4.5, 1, 1, 4.5, 4.5]),
+                dtype=np.float32
+            )
+            # world
+            self.world_width = 10
+            self.world_height = 10
+            self.left_wall = -4.5
+            self.right_wall = 4.5
+            self.bottom_wall = -4.5
+            self.top_wall = 4.5
+        else:
+            self.observation_space = gym.spaces.Box(
+                low=np.array([-10, -10, -np.pi, -np.pi -10, -10]),
+                high=np.array([10, 10, np.pi, np.pi, 10, 10]),
+                dtype=np.float32
+            )
+            self.world_width = 10
+            self.world_height = 10
+            self.left_wall = -10.0
+            self.right_wall = 10.0
+            self.bottom_wall = -10.0
+            self.top_wall = 10.0
         
         # state
         self.evader_state = np.array([1, 1, 0])
         self.persuer_state = np.array([-1, -1, 0])
         self.goal_location = np.array([2, 2, 0.2])
-        # world
-        self.world_width = 10
-        self.world_height = 10
-        self.left_wall = -4.5
-        self.right_wall = 4.5
-        self.bottom_wall = -4.5
-        self.top_wall = 4.5
 
         self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
@@ -83,10 +97,13 @@ class Air3dEnv(gym.Env):
 
         if not self.in_bounds(self.evader_state):
             done = True
-            info["safe"] = False
-            info["collision"] = "wall"
-            info["cost"] = 1
-            reward = -250
+            if self.walls:
+                info["safe"] = False
+                info["collision"] = "wall"
+                info["cost"] = 1
+                reward = -250
+            else:
+                info['collision'] = 'timeout'
         elif self.near_persuer(self.evader_state, self.persuer_state):
             # breakpoint()
             print('collision')
@@ -106,10 +123,12 @@ class Air3dEnv(gym.Env):
             reward = 100
             # self.generate_new_goal_location(self.evader_state)
 
-        info['obs'] = np.copy(self.theta_to_cos_sin(self.evader_state))
-        info['goal'] = np.copy(self.goal_location[:2])
+        info["obs"] = np.copy(self.theta_to_cos_sin(self.evader_state))
+        info["persuer"] = np.copy(self.theta_to_cos_sin(self.persuer_state))
+        info["goal"] = np.copy(self.goal_location[:2])
+        info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
 
-        return np.copy(np.concatenate((info['obs'], info['goal']))), reward, done, info
+        return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, info
 
     def reset(self, seed=None):
         if self.fixed_goal:
@@ -173,11 +192,12 @@ class Air3dEnv(gym.Env):
         # self.persuer_state = np.array([-1.2, -1.2, -np.pi/2])
         # self.persuer_state = np.array([-1.2, 1.2, -np.pi/2])
         info = {
-            "obs": np.copy(self.theta_to_cos_sin(self.evader_state)),
+            "obs": np.copy(self.evader_state),
+            "persuer": np.copy(self.persuer_state),
             "goal": np.copy(self.goal_location[:2]),
             "brt_value": self.grid.get_value(self.brt, self.evader_state)
         }
-        return np.copy(np.concatenate((info['obs'], info['goal']))), info
+        return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), info
 
     def generate_new_goal_location(self, evader_state):
         while True:
@@ -338,6 +358,12 @@ class Air3dEnv(gym.Env):
         return opt_dstb
         
 
+    def get_obs(self, evader_state, persuer_state, goal):
+        relative_state = self.relative_state(persuer_state, evader_state)
+        relative_state = self.theta_to_cos_sin(relative_state)
+        relative_goal = evader_state[:2] - goal[:2]
+        return np.concatenate((relative_state, relative_goal))
+        
     def theta_to_cos_sin(self, state):
         return np.array(
             [state[0], state[1], np.cos(state[2]), np.sin(state[2])], dtype=np.float32

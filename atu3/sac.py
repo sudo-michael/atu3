@@ -38,7 +38,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3d-Fixed-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
@@ -251,19 +251,19 @@ if __name__ == "__main__":
             writer.add_scalar("charts/total_hj", total_use_hj, global_step)
             writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
 
-        if 'collision' in info.keys():
-            if info['collision'] == 'wall':
-                total_collide_wall += 1
-            elif info['collision'] == 'persuer':
-                total_collide_persuer += 1
-            elif info['collision'] == 'goal':
-                total_reach_goal += 1
-            
-            writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
-            writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
-            writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)
-            writer.add_scalar("charts/total_hj", total_use_hj, global_step)
-            writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
+            if 'collision' in info['terminal_info'].keys():
+                if info['terminal_info']['collision'] == 'wall':
+                    total_collide_wall += 1
+                elif info['terminal_info']['collision'] == 'persuer':
+                    total_collide_persuer += 1
+                elif info['terminal_info']['collision'] == 'goal':
+                    total_reach_goal += 1
+                
+                writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
+                writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
+                writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)
+                writer.add_scalar("charts/total_hj", total_use_hj, global_step)
+                writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()

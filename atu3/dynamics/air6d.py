@@ -79,15 +79,14 @@ class Air6D:
 
     def opt_ctrl_non_hcl(self, state, spat_deriv):
         opt_we = 0
-        det = spat_deriv[0] * state[1] - spat_deriv[1] * state[0] - spat_deriv[2]
 
         if self.u_mode == "max":
-            if det >= 0:
+            if spat_deriv[5] >= 0:
                 opt_we = self.we_max
             else:
                 opt_we = -1 * self.we_max
         else:
-            if det >= 0:
+            if spat_deriv[5] >= 0:
                 opt_we = -1 * self.we_max
             else:
                 opt_we = self.we_max
@@ -108,15 +107,21 @@ class Air6D:
 
         return np.array([opt_wp], dtype=np.float32)
 
-    def dynamics_non_hcl(self, t, state, ctrl, is_evader=True):
+    def dynamics_non_hcl(self, t, state, ctrl, dstb):
+        xp_dot = self.vp * np.cos(state[2])
+        yp_dot = self.vp * np.sin(state[2])
+        thetap_dot = dstb[0]
+
+        xe_dot = self.ve * np.cos(state[5])
+        ye_dot = self.ve * np.cos(state[5])
+        thetae_dot = ctrl[0] 
+        
+        return np.array([xp_dot, yp_dot, thetap_dot, xe_dot, ye_dot, thetae_dot], dtype=np.float32)
+
+
+    def single_dynamics_non_hcl(self, t, state, ctrl, is_evader=True):
         v = self.ve if is_evader else self.vp
         x_dot = v * np.cos(state[2])
         y_dot = v * np.sin(state[2])
         theta_dot = ctrl[0]
-
-        xe_dot = v * np.cos(state[5])
-        ye_dot = v * np.cos(state[5])
-        thetae_dot = ctrl[0] 
-        
-        return np.array([x_dot, y_dot, theta_dot, xe_dot, ye_dot, thetae_dot], dtype=np.float32)
-
+        return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)

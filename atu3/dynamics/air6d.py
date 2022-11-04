@@ -2,7 +2,7 @@ import heterocl as hcl
 import numpy as np
 
 
-class Air3D:
+class Air6D:
     def __init__(self, we_max=1, wp_max=1, ve=1, vp=1, r=1, u_mode="max", d_mode="min") -> None:
         # state = [x_e, y_e, theta_e, x_p, y_p, theta_p]
         self.ve = ve
@@ -22,21 +22,19 @@ class Air3D:
         in5 = hcl.scalar(0, "in5")
         in6 = hcl.scalar(0, "in6")
 
-        det = hcl.scalar(0, "det")
-        det[0] = spat_deriv[0] * state[1] - spat_deriv[1] * state[0] - spat_deriv[2]
 
         with hcl.if_(self.u_mode == "max"):
-            with hcl.if_(det[0] >= 0):
+            with hcl.if_(spat_deriv[5] >= 0):
                 opt_we[0] = self.we_max
             with hcl.else_():
                 opt_we[0] = -1 * self.we_max
         with hcl.else_():
-            with hcl.if_(det[0] >= 0):
+            with hcl.if_(spat_deriv[5] >= 0):
                 opt_we[0] = -1 * self.we_max
             with hcl.else_():
                 opt_we[0] = self.we_max
 
-        return opt_we, in2, in3, in4, in5, in6
+        return opt_we, in2, in3, in4
 
     def opt_dstb(self, t, state, spat_deriv):
         opt_wp = hcl.scalar(self.wp_max, "opt_wp")
@@ -57,7 +55,8 @@ class Air3D:
             with hcl.else_():
                 opt_wp[0] = self.wp_max
 
-        return opt_wp, in2, in3, in4, in5, in6
+        # return opt_wp, in2, in3, in4, in5, in6
+        return opt_wp, in2, in3, in4
 
     def dynamics(self, t, state, u_opt, d_opt):
         # u_opt[0] = omega_e
@@ -69,10 +68,9 @@ class Air3D:
         x5_dot = hcl.scalar(0, "x5_dot")
         x6_dot = hcl.scalar(0, "x6_dot")
 
-        x1_dot[0] = -self.ve + self.vp * hcl.cos(state[2]) + u_opt[0] * state[1]
-        x2_dot[0] = self.vp * hcl.sin(state[2]) - u_opt[0] * state[0]
-        x3_dot[0] = d_opt[0] - u_opt[0]
-
+        x1_dot[0] = self.vp * hcl.cos(state[2])
+        x2_dot[0] = self.vp * hcl.sin(state[2])
+        x3_dot[0] = d_opt[0]
         x4_dot[0] = self.ve * hcl.cos(state[5])
         x5_dot[0] = self.ve * hcl.sin(state[5])
         x6_dot[0] = u_opt[0]

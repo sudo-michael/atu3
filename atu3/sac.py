@@ -38,7 +38,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3d-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         next_obs, rewards, dones, info = env.step(actions[0]) # actions[0] since there's only 1 env
 
         
-        total_unsafe += not info.get('safe', True)
+        total_unsafe += not info.get('safe', Truet
 
         if used_hj:
             rewards -= args.reward_shape_hj_takeover

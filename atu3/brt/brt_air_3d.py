@@ -14,9 +14,11 @@ grid = Grid(
 
 car_r = 0.2
 car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=1.0, vp=0.7)
+car_brt_2 = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
 
 persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.ve)
 
+VERSION=2
 cylinder_r = car_r + car_r + 0.2
 
 if __name__ in "__main__":
@@ -26,7 +28,7 @@ if __name__ in "__main__":
 
     ivf = CylinderShape(grid, [2], np.zeros(3), cylinder_r)
 
-    def brt(d=True):
+    def brt(version=1):
         lookback_length = 2.0
         t_step = 0.05
         small_number = 1e-5
@@ -34,8 +36,13 @@ if __name__ in "__main__":
 
         compMethods = {"TargetSetMode": "minVWithV0"}
 
+        if version == 1:
+            car = car_brt
+        elif version == 2:
+            car = car_brt_2
+
         result = HJSolver(
-            car_brt,
+            car,
             grid,
             ivf, 
             tau,
@@ -46,11 +53,9 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu3/envs/assets/brts/air3d_brt.npy", result)
+        np.save(f"./atu3/envs/assets/brts/air3d_brt_{version}.npy", result)
 
-    brt(d=False)
-
-    def backup_brt():
+    def backup_brt(version=1):
         lookback_length = 2.0
         t_step = 0.05
         small_number = 1e-5
@@ -70,7 +75,8 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu3/envs/assets/brts/backup_air3d_brt.npy", result)
+        np.save(f"./atu3/envs/assets/brts/air3d_brt_{version}.npy", result)
 
-    brt(d=False)
-    backup_brt()
+    brt(VERSION)
+    backup_brt(VERSION)
+        

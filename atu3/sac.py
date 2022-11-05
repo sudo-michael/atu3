@@ -75,15 +75,13 @@ def parse_args():
     # fmt: on
     return args
 
-
-
-
 def make_env(env_id, seed, idx, capture_video, run_name):
     env = gym.make(env_id)
     env = gym.wrappers.RecordEpisodeStatistics(env)
     if capture_video:
         if idx == 0:
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
+            # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
     env = atu3.utils.AutoResetWrapper(env)
     env.seed(seed)
     env.action_space.seed(seed)
@@ -238,7 +236,7 @@ if __name__ == "__main__":
         next_obs, rewards, dones, info = env.step(actions[0]) # actions[0] since there's only 1 env
 
         
-        total_unsafe += not info.get('safe', Truet
+        total_unsafe += not info.get('safe', True)
 
         if used_hj:
             rewards -= args.reward_shape_hj_takeover

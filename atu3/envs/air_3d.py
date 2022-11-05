@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from atu3.utils import normalize_angle, spa_deriv
-from atu3.brt.brt_air_3d import car_brt, grid
+from atu3.brt.brt_air_3d import car_brt, grid, car_brt_2
 import torch
 
 import sys
@@ -21,10 +21,13 @@ class Air3dEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal, walls) -> None:
+    def __init__(self, fixed_goal, walls, version=1) -> None:
         self.fixed_goal = fixed_goal
         self.walls=walls
-        self.car = car_brt
+        if version==1:
+            self.car = car_brt
+        elif version == 2:
+            self.car = car_brt_2
         self.dt = 0.05
 
         self.action_space = gym.spaces.Box(
@@ -33,8 +36,8 @@ class Air3dEnv(gym.Env):
 
         if self.walls:
             self.observation_space = gym.spaces.Box(
-                low=np.array([-4.5, -4.5, -1, -1, -4.5, -4.5]),
-                high=np.array([4.5, 4.5, 1, 1, 4.5, 4.5]),
+                low=np.array([-4.5, -4.5, -1, -1, -4.5, -4.5, -4.5, -4.5]),
+                high=np.array([4.5, 4.5, 1, 1, 4.5, 4.5, -4.5, -4.5]),
                 dtype=np.float32
             )
             # world
@@ -46,8 +49,8 @@ class Air3dEnv(gym.Env):
             self.top_wall = 4.5
         else:
             self.observation_space = gym.spaces.Box(
-                low=np.array([-10, -10, -1, -1, -10, -10]),
-                high=np.array([10, 10, 1, 1, 10, 10]),
+                low=np.array([-10, -10, -1, -1, -10, -10, -10, -10]),
+                high=np.array([10, 10, 1, 1, 10, 10, 10, 10]),
                 dtype=np.float32
             )
             self.world_width = 10
@@ -68,8 +71,8 @@ class Air3dEnv(gym.Env):
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, "assets/brts/air3d_brt.npy"))
-        self.backup_brt = np.load(os.path.join(dir_path, "assets/brts/backup_air3d_brt.npy"))
+        self.brt = np.load(os.path.join(dir_path, f"assets/brts/air3d_brt_{version}.npy"))
+        self.backup_brt = np.load(os.path.join(dir_path, f"assets/brts/backup_air3d_brt_{version}.npy"))
 
         self.grid = grid
 
@@ -118,7 +121,7 @@ class Air3dEnv(gym.Env):
             info["safe"] = False
             info["collision"] = "persuer"
             info["cost"] = 1
-            reward = -250
+            # reward = -250
         elif self.near_goal(self.evader_state, self.goal_location):
             done = True
             info["collision"] = 'goal'
@@ -131,7 +134,6 @@ class Air3dEnv(gym.Env):
         info["persuer"] = np.copy(self.theta_to_cos_sin(self.persuer_state))
         info["goal"] = np.copy(self.goal_location[:2])
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
-
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, info
 
     def reset(self, seed=None):
@@ -360,7 +362,7 @@ class Air3dEnv(gym.Env):
         relative_state = self.relative_state(persuer_state, evader_state)
         relative_state = self.theta_to_cos_sin(relative_state)
         relative_goal = evader_state[:2] - goal[:2]
-        return np.concatenate((relative_state, relative_goal))
+        return np.concatenate((relative_state, relative_goal, goal[:2]))
         
     def theta_to_cos_sin(self, state):
         return np.array(

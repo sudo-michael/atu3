@@ -38,7 +38,8 @@ if __name__ in "__main__":
             np.minimum(lower_half_space(X5, -2.0 + car_r), upper_half_space(X5, 2.0 - car_r))
         )
 
-    ivf = np.minimum(collide(X1, X2, X4, X5), wall(X4, X5))
+    # ivf = np.minimum(collide(X1, X2, X4, X5), wall(X4, X5))
+    ivf = collide(X1, X2, X4, X5)
 
 
     def brt(d=True):
@@ -61,6 +62,6 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu3/envs/assets/brts/air6d_brt_20.npy", result)
+        np.save("./atu3/envs/assets/brts/air6d_brt_no_wall_20.npy", result)
 
     brt(d=False)

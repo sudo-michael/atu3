@@ -38,7 +38,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-v1",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
@@ -80,8 +80,8 @@ def make_env(env_id, seed, idx, capture_video, run_name):
     env = gym.wrappers.RecordEpisodeStatistics(env)
     if capture_video:
         if idx == 0:
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
-            # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
     env = atu3.utils.AutoResetWrapper(env)
     env.seed(seed)
     env.action_space.seed(seed)

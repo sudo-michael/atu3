@@ -16,9 +16,10 @@ car_r = 0.2
 car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=1.0, vp=0.7)
 car_brt_2 = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
 
-persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.ve)
+persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.vp)
+persuer_backup_brt_2 = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt_2.wp_max, speed=car_brt_2.vp)
 
-VERSION=2
+VERSION=1
 cylinder_r = car_r + car_r + 0.2
 
 if __name__ in "__main__":
@@ -75,7 +76,7 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save(f"./atu3/envs/assets/brts/air3d_brt_{version}.npy", result)
+        np.save(f"./atu3/envs/assets/brts/backup_air3d_brt_{version}.npy", result)
 
     brt(VERSION)
     backup_brt(VERSION)

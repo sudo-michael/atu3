@@ -1,0 +1,7 @@
+* Installation
+conda env create -f environment.yml
+then
+conda install -c cornell-zhang heterocl -c conda-forge
+
+pip install stable-baselines3
+pip install gym==0.23.1

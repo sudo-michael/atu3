@@ -64,6 +64,7 @@ class Air3dEnv(gym.Env):
         self.evader_state = np.array([1, 1, 0])
         self.persuer_state = np.array([-1, -1, 0])
         self.goal_location = np.array([2, 2, 0.2])
+        self.goal_r = 0.6
 
         self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
@@ -94,7 +95,7 @@ class Air3dEnv(gym.Env):
         # 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         # reward = -np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
-        reward = (self.last_dist_to_goal - dist_to_goal)
+        reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
         self.last_dist_to_goal = dist_to_goal
         done = False
         info = {}
@@ -127,7 +128,7 @@ class Air3dEnv(gym.Env):
             info["collision"] = 'goal'
             # info['steps_to_goal'] = self.t - self.last_t_at_goal
             # self.last_t_at_goal = self.t
-            reward = 100
+            reward = 1
             # self.generate_new_goal_location(self.evader_state)
 
         info["obs"] = np.copy(self.theta_to_cos_sin(self.evader_state))
@@ -224,7 +225,7 @@ class Air3dEnv(gym.Env):
         # r of goal == self.car.r
         if tol == None:
             return (
-                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.car.r + self.car.r
+                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.goal_r
             )
         else:
             return (
@@ -252,7 +253,7 @@ class Air3dEnv(gym.Env):
         add_robot(self.evader_state, color="blue")
         add_robot(self.persuer_state, color="red")
         goal = plt.Circle(
-            self.goal_location[:2], radius=self.car.r, color="g"
+            self.goal_location[:2], radius=self.goal_r, color="g"
         )
         self.ax.add_patch(goal)
 

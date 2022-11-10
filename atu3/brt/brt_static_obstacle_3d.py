@@ -1,6 +1,6 @@
 import numpy as np
 import odp
-from atu.dynamics.DubinsCar import DubinsCar
+from atu3.dynamics.DubinsCar import DubinsCar
 from odp.Grid.GridProcessing import Grid
 
 g = Grid(

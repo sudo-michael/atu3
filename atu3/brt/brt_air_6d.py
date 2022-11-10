@@ -4,8 +4,8 @@ from atu3.dynamics.air6d import Air6D
 from odp.Grid.GridProcessing import Grid
 
 grid = Grid(
-    np.array([-2, -2, -np.pi, -2, -2, -np.pi]),
-    np.array([2, 2, np.pi, 2, 2, np.pi]),
+    np.array([-5, -5, -np.pi, -5, -5, -np.pi]),
+    np.array([5, 5, np.pi, 5, 5, np.pi]),
     6,
     np.array([30, 30, 24, 30, 30, 24]),
     np.array([2, 5]),
@@ -62,6 +62,6 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu3/envs/assets/brts/air6d_brt_no_wall_30.npy", result)
+        np.save("./atu3/envs/assets/brts/air6d_brt_no_wall_5_30.npy", result)
 
     brt(d=False)

@@ -21,7 +21,7 @@ class Air6dEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal=False, walls=False) -> None:
+    def __init__(self, fixed_goal=False, walls=False, version=1) -> None:
         self.fixed_goal = fixed_goal
         self.walls=walls
         self.car = car_brt
@@ -46,8 +46,10 @@ class Air6dEnv(gym.Env):
             self.top_wall = 4.5
         else:
             self.observation_space = gym.spaces.Box(
-                low=np.array([-10, -10, -1, -1, -10, -10]),
-                high=np.array([10, 10, 1, 1, 10, 10]),
+                # low=np.array([-10, -10, -1, -1, -10, -10]),
+                # high=np.array([10, 10, 1, 1, 10, 10]),
+                low=np.array([-5, -5, -1, -1, -5, -5]),
+                high=np.array([5, 5, 1, 1, 5, 5]),
                 dtype=np.float32
             )
             self.world_width = 10
@@ -68,7 +70,7 @@ class Air6dEnv(gym.Env):
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, "assets/brts/air6d_brt_20.npy"))
+        self.brt = np.load(os.path.join(dir_path, "assets/brts/air6d_brt_no_wall_5_30.npy"))
         self.backup_brt = np.load(os.path.join(dir_path, "assets/brts/backup_air3d_brt.npy"))
 
         self.grid = grid
@@ -88,7 +90,9 @@ class Air6dEnv(gym.Env):
         )
         self.persuer_state[2] = normalize_angle(self.persuer_state[2])
 
-        reward = -np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
+        dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
+        reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
+        self.last_dist_to_goal = dist_to_goal
         done = False
         info = {}
         info["cost"] = 0
@@ -113,13 +117,13 @@ class Air6dEnv(gym.Env):
             info["safe"] = False
             info["collision"] = "persuer"
             info["cost"] = 1
-            reward = -250
+            reward = -1
         elif self.near_goal(self.evader_state, self.goal_location):
             done = True
             info["collision"] = 'goal'
             # info['steps_to_goal'] = self.t - self.last_t_at_goal
             # self.last_t_at_goal = self.t
-            reward = 100
+            reward = 1
             # self.generate_new_goal_location(self.evader_state)
 
         info["obs"] = np.copy(self.theta_to_cos_sin(self.evader_state))
@@ -190,6 +194,7 @@ class Air6dEnv(gym.Env):
         # self.persuer_state = np.array([-1.2, 0, -np.pi/4])
         # self.persuer_state = np.array([-1.2, -1.2, -np.pi/2])
         # self.persuer_state = np.array([-1.2, 1.2, -np.pi/2])
+        self.last_dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         info = {
             "obs": np.copy(self.evader_state),
             "persuer": np.copy(self.persuer_state),
@@ -325,7 +330,7 @@ class Air6dEnv(gym.Env):
         return relative_state
 
     def use_opt_ctrl(self, threshold=0.2):
-        print(f'v: {self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state))}')
+        # print(f'v: {self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state))}')
         return self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state)) < threshold
 
     def opt_ctrl(self):
@@ -349,22 +354,7 @@ class Air6dEnv(gym.Env):
         
 
     def relative_state(self, persuer_state, evader_state):
-        rotated_relative_state = np.zeros(3)
-        relative_state = persuer_state - evader_state
-
-        angle = -evader_state[2]
-
-        # fmt: off
-        # brt assume that evader_state is at theta=0
-        rotated_relative_state[0] = relative_state[0] * np.cos(angle) - relative_state[1] * np.sin(angle)
-        rotated_relative_state[1] = relative_state[0] * np.sin(angle) + relative_state[1] * np.cos(angle)
-        # fmt: on
-
-        # after rotating by -evader_state[2], the relative angle will still be the same
-        # rotated_relative_state[0] = np.abs(rotated_relative_state[0])
-        # rotated_relative_state[1] = np.abs(rotated_relative_state[1])
-        rotated_relative_state[2] = normalize_angle(relative_state[2])
-        return rotated_relative_state
+        return np.concatenate((persuer_state, evader_state))
     def get_obs(self, evader_state, persuer_state, goal):
         relative_state = self.relative_state(persuer_state, evader_state)
         relative_state = self.theta_to_cos_sin(relative_state)

@@ -11,7 +11,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3 import HerReplayBuffer
+from stable_baselines3.common.buffers import DictReplayBuffer
+from stable_baselines3.common.vec_env import DummyVecEnv
 from torch.utils.tensorboard import SummaryWriter
 
 import atu3
@@ -38,13 +40,13 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-GoalAir3d-NoWalls-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
     parser.add_argument("--buffer-size", type=int, default=int(1e6),
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.95,
+    parser.add_argument("--gamma", type=float, default=0.9,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
@@ -69,31 +71,39 @@ def parse_args():
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
 
-    parser.add_argument("--reward-shape-hj-takeover", type=float, default=9.4069,
+    parser.add_argument("--reward-shape-hj-takeover", type=float, default=0.00,
         help="reward pentalty for hj takeover")
     args = parser.parse_args()
     # fmt: on
     return args
 
 def make_env(env_id, seed, idx, capture_video, run_name):
-    env = gym.make(env_id)
-    env = gym.wrappers.RecordEpisodeStatistics(env)
-    if capture_video:
-        if idx == 0:
-            # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-    env = atu3.utils.AutoResetWrapper(env)
-    env.seed(seed)
-    env.action_space.seed(seed)
-    env.observation_space.seed(seed)
-    return env
+    def thunk():
+        env = gym.make(env_id)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+        if capture_video:
+            if idx == 0:
+                # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
+                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        env.seed(seed)
+        env.action_space.seed(seed)
+        env.observation_space.seed(seed)
+        return env
+    return thunk
 
+def dict_obs_to_tensor(obs, device=torch.device("cuda")):
+    x = np.concatenate([obs['observation'], obs['achieved_goal'], obs['desired_goal']], 1)
+    return torch.Tensor(x).to(device)
+
+def dict_tensor_to_obs(obs):
+    return torch.cat([obs['observation'], obs['achieved_goal'], obs['desired_goal']], 1)
 
 # ALGO LOGIC: initialize agent here:
 class SoftQNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.observation_space.shape).prod() + np.prod(env.action_space.shape), 256)
+        obs_shape = sum([np.array(v.shape).prod() for v in env.observation_space.values()])
+        self.fc1 = nn.Linear(obs_shape + np.prod(env.action_space.shape), 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 1)
 
@@ -104,7 +114,7 @@ class SoftQNetwork(nn.Module):
         x = self.fc3(x)
         return x
 
-
+    
 LOG_STD_MAX = 2
 LOG_STD_MIN = -5
 
@@ -112,7 +122,8 @@ LOG_STD_MIN = -5
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.observation_space.shape).prod(), 256)
+        obs_shape = sum([np.array(v.shape).prod() for v in env.observation_space.values()])
+        self.fc1 = nn.Linear(obs_shape, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc_mean = nn.Linear(256, np.prod(env.action_space.shape))
         self.fc_logstd = nn.Linear(256, np.prod(env.action_space.shape))
@@ -175,16 +186,16 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    env = make_env(args.env_id, args.seed, 0, args.capture_video, run_name)
-    assert isinstance(env.action_space, gym.spaces.Box), "only continuous action space is supported"
+    envs = DummyVecEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
+    # assert isinstance(envs.action_space, gym.spaces.Box), "only continuous action space is supported"
 
-    max_action = float(env.action_space.high[0])
+    max_action = float(envs.action_space.high[0])
 
-    actor = Actor(env).to(device)
-    qf1 = SoftQNetwork(env).to(device)
-    qf2 = SoftQNetwork(env).to(device)
-    qf1_target = SoftQNetwork(env).to(device)
-    qf2_target = SoftQNetwork(env).to(device)
+    actor = Actor(envs).to(device)
+    qf1 = SoftQNetwork(envs).to(device)
+    qf2 = SoftQNetwork(envs).to(device)
+    qf1_target = SoftQNetwork(envs).to(device)
+    qf2_target = SoftQNetwork(envs).to(device)
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
@@ -192,83 +203,93 @@ if __name__ == "__main__":
 
     # Automatic entropy tuning
     if args.autotune:
-        target_entropy = -torch.prod(torch.Tensor(env.action_space.shape).to(device)).item()
+        target_entropy = -torch.prod(torch.Tensor(envs.action_space.shape).to(device)).item()
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
     else:
         alpha = args.alpha
 
-    env.observation_space.dtype = np.float32
-    rb = ReplayBuffer(
+    drb = DictReplayBuffer(
         args.buffer_size,
-        env.observation_space,
-        env.action_space,
+        envs.observation_space,
+        envs.action_space,
         device,
         handle_timeout_termination=True,
     )
+
+    rb = HerReplayBuffer(
+        envs, args.buffer_size, device, drb, n_sampled_goal=4, online_sampling=False, handle_timeout_termination=True
+    )
+
     start_time = time.time()
 
     # TRY NOT TO MODIFY: start the game
-    obs, info = env.reset()
-    obs = np.expand_dims(obs, axis=0) # (1, 3)
+    obs = envs.reset()
     total_unsafe = 0
     total_use_hj = 0
     total_collide_wall = 0
     total_collide_persuer = 0
     total_reach_goal = 0
-    # env.unwrapped.evader_state = np.array([-3.31275266, -3.58783757,  2.64757049])
+
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         used_hj = False
+        used_hj_env_idx = []
         # print(f"{info['brt_value']=} {env.unwrapped.evader_state=}")
 
-        if env.use_opt_ctrl():
-            actions = np.expand_dims(env.opt_ctrl(), 0)
-            # print(f'using hj: {actions}')
-            used_hj = True
-            total_use_hj += 1
-        else:
-            actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
-            actions = actions.detach().cpu().numpy() # (1, 1)
+        for idx, env in enumerate(envs.envs):
+            if env.use_opt_ctrl():
+                actions = np.expand_dims(env.opt_ctrl(), 0)
+                # print(f'using hj: {actions}')
+                used_hj = True
+                total_use_hj += 1
+                used_hj_env_idx.append(idx)
+            else:
+                actions, _, _ = actor.get_action(dict_obs_to_tensor(obs, device))
+                actions = actions.detach().cpu().numpy() # (1, 1)
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, dones, info = env.step(actions[0]) # actions[0] since there's only 1 env
+        next_obs, rewards, dones, infos = envs.step(actions) # actions[0] since there's only 1 env
 
         
-        total_unsafe += not info.get('safe', True)
+        # if used_hj:
+        for idx in used_hj_env_idx:
+            rewards[idx] -= args.reward_shape_hj_takeover
 
-        if used_hj:
-            rewards -= args.reward_shape_hj_takeover
-
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        if "episode" in info.get('terminal_info', {}).keys():
-            print(f"global_step={global_step}, episodic_return={info['terminal_info']['episode']['r']} collision={info['terminal_info'].get('collision', 'timeout')}")
-            writer.add_scalar("charts/episodic_return", info['terminal_info']["episode"]["r"], global_step)
-            writer.add_scalar("charts/episodic_length", info['terminal_info']["episode"]["l"], global_step)
-            writer.add_scalar("charts/total_hj", total_use_hj, global_step)
-            writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
-
-            if 'collision' in info['terminal_info'].keys():
-                if info['terminal_info']['collision'] == 'wall':
-                    total_collide_wall += 1
-                elif info['terminal_info']['collision'] == 'persuer':
-                    total_collide_persuer += 1
-                elif info['terminal_info']['collision'] == 'goal':
-                    total_reach_goal += 1
-                
-                writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
-                writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
-                writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)
+        # # TRY NOT TO MODIFY: record rewards for plotting purposes
+        for info in infos:
+            total_unsafe += not info.get('safe', True)
+            if "episode" in info.keys():
+                print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 writer.add_scalar("charts/total_hj", total_use_hj, global_step)
                 writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
+                
+
+                if 'collision' in info.keys():
+                    if info['collision'] == 'wall':
+                        total_collide_wall += 1
+                    elif info['collision'] == 'persuer':
+                        total_collide_persuer += 1
+                    elif info['collision'] == 'goal':
+                        total_reach_goal += 1
+                    
+                    writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
+                    writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
+                    writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)
+                    writer.add_scalar("charts/total_hj", total_use_hj, global_step)
+                    writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
+                break
+
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()
-        if dones:
-            real_next_obs = info["terminal_observation"]
-        real_next_obs = np.expand_dims(real_next_obs, axis=0)
-        rb.add(obs, real_next_obs, actions, np.array([rewards]), np.array([dones]), [info])
+        for idx, d in enumerate(dones):
+            if d:
+                real_next_obs[idx] = infos[idx]["terminal_observation"]
+        rb.add(obs, real_next_obs, actions, rewards, dones, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
@@ -277,14 +298,14 @@ if __name__ == "__main__":
         if global_step > args.learning_starts:
             data = rb.sample(args.batch_size)
             with torch.no_grad():
-                next_state_actions, next_state_log_pi, _ = actor.get_action(data.next_observations)
-                qf1_next_target = qf1_target(data.next_observations, next_state_actions)
-                qf2_next_target = qf2_target(data.next_observations, next_state_actions)
+                next_state_actions, next_state_log_pi, _ = actor.get_action(dict_tensor_to_obs(data.next_observations))
+                qf1_next_target = qf1_target(dict_tensor_to_obs(data.next_observations), next_state_actions)
+                qf2_next_target = qf2_target(dict_tensor_to_obs(data.next_observations), next_state_actions)
                 min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
                 next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
 
-            qf1_a_values = qf1(data.observations, data.actions).view(-1)
-            qf2_a_values = qf2(data.observations, data.actions).view(-1)
+            qf1_a_values = qf1(dict_tensor_to_obs(data.observations), data.actions).view(-1)
+            qf2_a_values = qf2(dict_tensor_to_obs(data.observations), data.actions).view(-1)
             qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
             qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
             qf_loss = qf1_loss + qf2_loss
@@ -297,9 +318,9 @@ if __name__ == "__main__":
                 for _ in range(
                     args.policy_frequency
                 ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
-                    pi, log_pi, _ = actor.get_action(data.observations)
-                    qf1_pi = qf1(data.observations, pi)
-                    qf2_pi = qf2(data.observations, pi)
+                    pi, log_pi, _ = actor.get_action(dict_tensor_to_obs(data.observations))
+                    qf1_pi = qf1(dict_tensor_to_obs(data.observations), pi)
+                    qf2_pi = qf2(dict_tensor_to_obs(data.observations), pi)
                     min_qf_pi = torch.min(qf1_pi, qf2_pi).view(-1)
                     actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
 
@@ -309,7 +330,7 @@ if __name__ == "__main__":
 
                     if args.autotune:
                         with torch.no_grad():
-                            _, log_pi, _ = actor.get_action(data.observations)
+                            _, log_pi, _ = actor.get_action(dict_tensor_to_obs(data.observations))
                         alpha_loss = (-log_alpha * (log_pi + target_entropy)).mean()
 
                         a_optimizer.zero_grad()

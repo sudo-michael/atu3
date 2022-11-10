@@ -37,8 +37,16 @@ register(
 )
 
 register(
-    id="Safe-Air3d-GoalNoWalls-v1",
+    id="Safe-GoalAir3d-NoWalls-v1",
     entry_point="atu3.envs:GoalAir3dEnv",
     max_episode_steps=1_000,
     kwargs={'fixed_goal' : False, 'walls': False, 'version': 2}
+)
+
+
+register(
+    id="Safe-StaticAir3d-NoWalls-v0",
+    entry_point="atu3.envs:StaticAir3dEnv",
+    max_episode_steps=1_000,
+    kwargs={'fixed_goal' : False, 'walls': False, 'version': 1}
 )

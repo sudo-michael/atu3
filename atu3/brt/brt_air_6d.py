@@ -7,7 +7,7 @@ grid = Grid(
     np.array([-2, -2, -np.pi, -2, -2, -np.pi]),
     np.array([2, 2, np.pi, 2, 2, np.pi]),
     6,
-    np.array([20, 20, 10, 20, 20, 10]),
+    np.array([30, 30, 24, 30, 30, 24]),
     np.array([2, 5]),
 )
 car_r = 0.2
@@ -44,7 +44,7 @@ if __name__ in "__main__":
 
     def brt(d=True):
         lookback_length = 3.0
-        t_step = 0.05
+        t_step = 0.06
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
 
@@ -62,6 +62,6 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu3/envs/assets/brts/air6d_brt_no_wall_20.npy", result)
+        np.save("./atu3/envs/assets/brts/air6d_brt_no_wall_30.npy", result)
 
     brt(d=False)

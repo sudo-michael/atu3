@@ -85,6 +85,9 @@ class GoalAir3dEnv(gym.Env):
 
     def step(self, action):
         # TODO change to odeint
+        info = {}
+        info['prev_achieved_goal'] = self.evader_state[:2].copy()
+
         self.evader_state = (
             self.car.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
             * self.dt
@@ -98,15 +101,15 @@ class GoalAir3dEnv(gym.Env):
         )
         self.persuer_state[2] = normalize_angle(self.persuer_state[2])
 
-        info = {}
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
         info["cost"] = 0
         info["safe"] = True
 
 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location)
-        reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
-        self.last_dist_to_goal = dist_to_goal
+        # reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
+        reward = -dist_to_goal
+        # self.last_dist_to_goal = dist_to_goal
         done = False
 
         if not self.in_bounds(self.evader_state):
@@ -144,14 +147,17 @@ class GoalAir3dEnv(gym.Env):
 
         return self.get_obs(self.evader_state.copy(), self.persuer_state.copy(), self.goal_location.copy()), reward, done, info
 
-    def compute_reward(self, achieved_goal, desired_goal, info):
-        # this should be vectorized
-        print('compute reward', info)
-        dist_to_goal = np.linalg.norm(achieved_goal - desired_goal)
-        reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
-        self.last_dist_to_goal = dist_to_goal
+    def compute_reward(self, achieved_goal, desired_goal, infos):
+        # prev_achieved_goal = np.zeros((len(infos), 2))
+        # for idx, info in enumerate(infos):
+        #     prev_achieved_goal[idx] = info['prev_achieved_goal']
+        # last_dist_to_goal = np.linalg.norm(prev_achieved_goal - desired_goal, axis=1)
+        # dist_to_goal = np.linalg.norm(achieved_goal - desired_goal, axis=1)
+        # reward = (last_dist_to_goal - dist_to_goal) * 1.1
+        # print(reward.mean())
+        dist_to_goal = np.linalg.norm(achieved_goal - desired_goal, axis=1)
 
-        return reward
+        return -dist_to_goal
         
     def reset(self, seed=None):
         if self.fixed_goal:

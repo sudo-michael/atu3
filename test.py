@@ -1,3 +1,4 @@
+# %%
 import atu3
 import gym
 from stable_baselines3 import HerReplayBuffer
@@ -7,13 +8,14 @@ import numpy as np
 
 def make_env():
     def funct():
-        env = gym.make('Safe-Air3d-NoWalls-v1')
+        env = gym.make('Safe-GoalAir3d-NoWalls-v0')
         return env
     return funct
 # envs = gym.vector.SyncVectorEnv(
 #     [make_env() for _ in range(1)]
 # )
 envs = DummyVecEnv([make_env()])
+# %%
 envs.reset()
 
 # env = gym.make('Safe-Air3d-NoWalls-v1')
@@ -40,6 +42,7 @@ for _ in range(2_000):
 
     obs = next_obs
 
-print(hrb.sample(1))
+batch  = hrb.sample(4)
 
 # obs, infos = envs.reset()
+# %%

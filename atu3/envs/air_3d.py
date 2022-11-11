@@ -138,13 +138,13 @@ class Air3dEnv(gym.Env):
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, info
 
     def reset(self, seed=None):
-        if self.fixed_goal:
-            self.goal_location = np.array([2.5, 2.5])
-        else:
-            goal_bounds = np.array([2.5, 2.5])
-            self.goal_location = np.random.uniform(
-                low=-goal_bounds, high=goal_bounds
-            )
+        # if self.fixed_goal:
+        #     self.goal_location = np.array([2.5, 2.5])
+        # else:
+        goal_bounds = np.array([2.5, 2.5])
+        self.goal_location = np.random.uniform(
+            low=-goal_bounds, high=goal_bounds
+        )
 
         if self.fixed_goal:
             while True:

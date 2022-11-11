@@ -16,9 +16,23 @@ register(
 )
 
 register(
+    id="Safe-Air3d-NoWalls-Fixed-v0",
+    entry_point="atu3.envs:Air3dEnv",
+    max_episode_steps=1_000,
+    kwargs={'fixed_goal' : True, 'walls': False, 'version': 1}
+)
+
+register(
+    id="Safe-Air3d-NoWalls-Fixed-v1",
+    entry_point="atu3.envs:Air3dEnv",
+    max_episode_steps=1_000,
+    kwargs={'fixed_goal' : True, 'walls': False, 'version': 2}
+)
+
+register(
     id="Safe-Air3d-Fixed-v0",
     entry_point="atu3.envs:Air3dEnv",
-    max_episode_steps=400,
+    max_episode_steps=1_000,
     kwargs={'fixed_goal' :True, 'walls': True}
 )
 

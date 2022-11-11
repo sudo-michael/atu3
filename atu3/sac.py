@@ -17,6 +17,8 @@ from torch.utils.tensorboard import SummaryWriter
 import atu3
 from atu3.utils import AutoResetWrapper
 
+from collections import deque
+
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
@@ -217,6 +219,7 @@ if __name__ == "__main__":
     total_collide_wall = 0
     total_collide_persuer = 0
     total_reach_goal = 0
+    success_rate = deque(maxlen=20)
     # env.unwrapped.evader_state = np.array([-3.31275266, -3.58783757,  2.64757049])
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
@@ -252,16 +255,23 @@ if __name__ == "__main__":
             if 'collision' in info['terminal_info'].keys():
                 if info['terminal_info']['collision'] == 'wall':
                     total_collide_wall += 1
+                    success_rate.append(0)
                 elif info['terminal_info']['collision'] == 'persuer':
                     total_collide_persuer += 1
+                    success_rate.append(0)
                 elif info['terminal_info']['collision'] == 'goal':
                     total_reach_goal += 1
+                    success_rate.append(1)
+                else:
+                    success_rate.append(0)
+
                 
                 writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
                 writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
                 writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)
                 writer.add_scalar("charts/total_hj", total_use_hj, global_step)
                 writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
+                writer.add_scalar("charts/success_rate", sum(success_rate) / len(success_rate), global_step)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
         real_next_obs = next_obs.copy()

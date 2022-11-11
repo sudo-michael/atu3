@@ -64,7 +64,7 @@ class Air3dEnv(gym.Env):
         self.evader_state = np.array([1, 1, 0])
         self.persuer_state = np.array([-1, -1, 0])
         self.goal_location = np.array([2, 2, 0.2])
-        self.goal_r = 0.6
+        self.goal_r = 0.4
 
         self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
@@ -128,7 +128,7 @@ class Air3dEnv(gym.Env):
             info["collision"] = 'goal'
             # info['steps_to_goal'] = self.t - self.last_t_at_goal
             # self.last_t_at_goal = self.t
-            reward = 1
+            reward = 5
             # self.generate_new_goal_location(self.evader_state)
 
         info["obs"] = np.copy(self.theta_to_cos_sin(self.evader_state))
@@ -146,24 +146,47 @@ class Air3dEnv(gym.Env):
                 low=-goal_bounds, high=goal_bounds
             )
 
-        while True:
-            self.persuer_state = np.random.uniform(
-                low=-self.world_boundary, high=self.world_boundary
-            )
+        if self.fixed_goal:
+            while True:
+                self.persuer_state = np.random.uniform(
+                    low=np.array([-1, -1, -np.pi]), high=np.array([1, 1, np.pi])
+                )
 
-            if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
-                break
+                if not self.near_goal(self.persuer_state, self.goal_location):
+                    break
+        else:
+            while True:
+                self.persuer_state = np.random.uniform(
+                    low=-self.world_boundary, high=self.world_boundary
+                )
+
+                if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
+                    break
             
 
-        while True:
-            self.evader_state = np.random.uniform(
-                low=-self.world_boundary, high=self.world_boundary
-            )
+        if self.fixed_goal:
+            i = 0
+            while True and i < 10:
+                i += 1
+                self.evader_state = np.random.uniform(
+                    low=np.array([-3.5, -3.5, -np.pi]), high=np.array([-3, -3, np.pi])
+                )
 
-            if self.grid.get_value(
-                self.brt, self.relative_state(self.persuer_state, self.evader_state) 
-            ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
-                break
+                if self.grid.get_value(
+                    self.brt, self.relative_state(self.persuer_state, self.evader_state) 
+                ) > 0.2 and not self.near_goal(self.evader_state, self.goal_location):
+                    break
+            print(self.evader_state)
+        else:
+            while True:
+                self.evader_state = np.random.uniform(
+                    low=-self.world_boundary, high=self.world_boundary
+                )
+
+                if self.grid.get_value(
+                    self.brt, self.relative_state(self.persuer_state, self.evader_state) 
+                ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
+                    break
 
         # self.evader_state = np.array([0, 0, 0])
         # self.evader_state = np.array([0, 0, 0])
@@ -381,11 +404,12 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = gym.make("Safe-Air3d-NoWalls-v0")
+    env = gym.make("Safe-Air3d-NoWalls-Fixed-v0")
     # env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")
     obs = env.reset()
+        # print(obs)
     done = False
     while not done:
         if env.use_opt_ctrl():

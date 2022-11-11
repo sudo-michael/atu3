@@ -13,8 +13,11 @@ grid = Grid(
 car_r = 0.2
 # first 3 dim is for persuer, last 3 is for evader
 car_brt = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=1.0, vp=1.0)
+car_brt_2 = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
 
-cylinder_r = car_r + car_r + 0.1
+VERSION=2
+
+cylinder_r = car_r + car_r + 0.2
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
@@ -42,7 +45,7 @@ if __name__ in "__main__":
     ivf = collide(X1, X2, X4, X5)
 
 
-    def brt(d=True):
+    def brt(version):
         lookback_length = 3.0
         t_step = 0.06
         small_number = 1e-5
@@ -50,8 +53,13 @@ if __name__ in "__main__":
 
         compMethods = {"TargetSetMode": "minVWithV0"}
 
+        if version == 1:
+            car = car_brt
+        elif version == 2:
+            car = car_brt_2
+
         result = HJSolver(
-            car_brt,
+            car,
             grid,
             ivf, 
             tau,
@@ -62,6 +70,6 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save("./atu3/envs/assets/brts/air6d_brt_no_wall_5_30.npy", result)
+        np.save(f"./atu3/envs/assets/brts/air6d_brt_no_wall_5_30_v{version}.npy", result)
 
-    brt(d=False)
+    brt(VERSION)

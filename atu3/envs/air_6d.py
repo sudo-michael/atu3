@@ -21,7 +21,7 @@ class Air6dEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal=False, walls=False, version=1) -> None:
+    def __init__(self, fixed_goal=False, walls=False, version=2) -> None:
         self.fixed_goal = fixed_goal
         self.walls=walls
         self.car = car_brt
@@ -70,8 +70,8 @@ class Air6dEnv(gym.Env):
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, "assets/brts/air6d_brt_no_wall_5_30.npy"))
-        self.backup_brt = np.load(os.path.join(dir_path, "assets/brts/backup_air3d_brt.npy"))
+        self.brt = np.load(os.path.join(dir_path, f"assets/brts/air6d_brt_no_wall_5_30_v{version}.npy"))
+        self.backup_brt = np.load(os.path.join(dir_path, f"assets/brts/backup_air3d_brt_{version}.npy"))
 
         self.grid = grid
 
@@ -134,47 +134,47 @@ class Air6dEnv(gym.Env):
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, info
 
     def reset(self, seed=None):
-        # if self.fixed_goal:
-        #     self.goal_location = np.array([2.5, 2.5])
-        # else:
-        #     goal_bounds = np.array([2.5, 2.5])
-        #     self.goal_location = np.random.uniform(
-        #         low=-goal_bounds, high=goal_bounds
-        #     )
+        if self.fixed_goal:
+            self.goal_location = np.array([2.5, 2.5])
+        else:
+            goal_bounds = np.array([2.5, 2.5])
+            self.goal_location = np.random.uniform(
+                low=-goal_bounds, high=goal_bounds
+            )
 
-        # while True:
-        #     self.persuer_state = np.random.uniform(
-        #         low=-self.world_boundary, high=self.world_boundary
-        #     )
+        while True:
+            self.persuer_state = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
 
-        #     if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
-        #         break
+            if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
+                break
             
 
-        # if self.fixed_goal:
-        #     while True:
-        #         # choose to be "close" ish to goal
-        #         self.evader_state = np.random.uniform(
-        #             low=-np.array([1.5, 1.5, np.pi], dtype=np.float32), high=np.array([1.5, 1.5, np.pi], dtype=np.float32)
-        #         )
+        if self.fixed_goal:
+            while True:
+                # choose to be "close" ish to goal
+                self.evader_state = np.random.uniform(
+                    low=-np.array([1.5, 1.5, np.pi], dtype=np.float32), high=np.array([1.5, 1.5, np.pi], dtype=np.float32)
+                )
 
-        #         if self.grid.get_value(
-        #             self.brt, self.evader_state
-        #         ) > 0.5 and not self.near_goal(self.evader_state, self.goal_location) and not self.near_persuer(self.evader_state, self.persuer_state):
-        #             break
-        # else:
-        #     while True:
-        #         self.evader_state = np.random.uniform(
-        #             low=-self.world_boundary, high=self.world_boundary
-        #         )
+                if self.grid.get_value(
+                    self.brt, self.evader_state
+                ) > 0.5 and not self.near_goal(self.evader_state, self.goal_location) and not self.near_persuer(self.evader_state, self.persuer_state):
+                    break
+        else:
+            while True:
+                self.evader_state = np.random.uniform(
+                    low=-self.world_boundary, high=self.world_boundary
+                )
 
-        #         if self.grid.get_value(
-        #             self.brt, self.evader_state
-        #         ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
-        #             break
+                if self.grid.get_value(
+                    self.brt, self.state(self.persuer_state, self.evader_state)
+                ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
+                    break
 
-        self.evader_state = np.array([0, 0, 0])
-        self.persuer_state = np.array([2, 0, 0])
+        # self.evader_state = np.array([0, 0, 0])
+        # self.persuer_state = np.array([2, 0, 0])
         # self.persuer_state = np.array([-2, 0, 0])
         # self.evader_state = np.array([0, 0, 0.68])
         # self.persuer_state = np.array([2, 2, -0.30])
@@ -185,7 +185,7 @@ class Air6dEnv(gym.Env):
         # self.evader_state = np.array([-3, -3, np.pi/4])
         # self.persuer_state = np.array([2, 2, -np.pi])
         # NOT WORKING
-        # self.evader_state = np.array([0, 0, -np.pi/2 * 3])
+        # self.evader_state = np.array([0, 0, np.pi/2])
         # self.persuer_state = np.array([-1, -3, -np.pi/4])
         # self.evader_state = np.array([0, 0, 0])
         # self.persuer_state = np.array([-1, -1, -3 * np.pi/4])
@@ -215,18 +215,18 @@ class Air6dEnv(gym.Env):
                 break
 
     def in_bounds(self, evader_state):
-        if not (
-            self.left_wall + self.car.r
-            <= evader_state[0]
-            <= self.right_wall - self.car.r
-        ):
-            return False
-        elif not (
-            self.bottom_wall + self.car.r
-            <= evader_state[1]
-            <= self.top_wall - self.car.r
-        ):
-            return False
+        # if not (
+        #     self.left_wall + self.car.r
+        #     <= evader_state[0]
+        #     <= self.right_wall - self.car.r
+        # ):
+        #     return False
+        # elif not (
+        #     self.bottom_wall + self.car.r
+        #     <= evader_state[1]
+        #     <= self.top_wall - self.car.r
+        # ):
+        #     return False
         return True
 
     def near_goal(self, evader_state, goal_state, tol=None):
@@ -292,7 +292,7 @@ class Air6dEnv(gym.Env):
         #     X,
         #     Y,
         #     self.brt[index[0], index[1], index[2], :, :, index[5]],
-        #     levels=[0.1],
+        #     levels=[0.6],
         # )
 
         if self.walls:
@@ -329,7 +329,7 @@ class Air6dEnv(gym.Env):
         relative_state[2] = persuer_state[2]
         return relative_state
 
-    def use_opt_ctrl(self, threshold=0.2):
+    def use_opt_ctrl(self, threshold=0.6):
         # print(f'v: {self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state))}')
         return self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state)) < threshold
 
@@ -345,11 +345,13 @@ class Air6dEnv(gym.Env):
         state = self.state(self.persuer_state, self.evader_state)
         index = self.grid.get_index(state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
-        # if spat_deriv[2] == 0:
-        #     relative_state = self.relative_state2(self.persuer_state, self.evader_state)
-        #     index = self.grid.get_index(relative_state)
-        #     spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
+        if spat_deriv[2] == 0:
+            relative_state = self.relative_state2(self.persuer_state, self.evader_state)
+            index = self.grid.get_index(relative_state)
+            spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
+            # print('b: ', spat_deriv[:3])
         opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
+        # print(opt_dstb)
         return opt_dstb
         
 
@@ -386,18 +388,17 @@ if __name__ in "__main__":
     done = False
     while not done:
         if env.use_opt_ctrl():
-            # print("using opt ctrl")
+            print("using opt ctrl")
             action = env.opt_ctrl()
+        
         else:
-            print('not using opt ctrl')
-            action = np.array([1.5])
-            # action = env.action_space.sample()
+            action = np.array([-1.0])
         _, _, _, info = env.step(action)
 
         obs, reward, done, info = env.step(action)
         if done:
             print(info)
-            print("done")
+            print('done')
             break
 
         env.render()

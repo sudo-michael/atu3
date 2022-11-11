@@ -136,9 +136,13 @@ class StaticAir3dEnv(gym.Env):
             self.goal_location = np.array([2.5, 2.5])
         else:
             goal_bounds = np.array([2.5, 2.5])
-            self.goal_location = np.random.uniform(
-                low=-goal_bounds, high=goal_bounds
-            )
+            while True:
+                self.goal_location = np.random.uniform(
+                    low=-goal_bounds, high=goal_bounds
+                )
+
+                if not self.near_goal(self.evader_state, self.goal_location):
+                    break
 
         while True:
             self.evader_state = np.random.uniform(
@@ -150,27 +154,6 @@ class StaticAir3dEnv(gym.Env):
             ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
                 break
 
-        # self.evader_state = np.array([0, 0, 0])
-        # self.evader_state = np.array([0, 0, 0])
-        # self.persuer_state = np.array([-2, 0, 0])
-        # self.evader_state = np.array([0, 0, 0.68])
-        # self.persuer_state = np.array([2, 2, -0.30])
-        # self.evader_state = np.array([0, 0, -np.pi/2])
-        # self.persuer_state = np.array([0, -2, np.pi/2])
-        # self.evader_state = np.array([0, 0, np.pi/2])
-        # self.persuer_state = np.array([0, 2, -np.pi/2])
-        # self.evader_state = np.array([-3, -3, np.pi/4])
-        # self.persuer_state = np.array([2, 2, -np.pi])
-        # NOT WORKING
-        # self.evader_state = np.array([0, 0, -np.pi/2 * 3])
-        # self.persuer_state = np.array([-1, -3, -np.pi/4])
-        # self.evader_state = np.array([0, 0, 0])
-        # self.persuer_state = np.array([-1, -1, -3 * np.pi/4])
-        # self.persuer_state = np.array([-1, 0, np.pi])
-        # self.evader_state = np.array([0, 0, np.pi/4])
-        # self.persuer_state = np.array([-1.2, 0, -np.pi/4])
-        # self.persuer_state = np.array([-1.2, -1.2, -np.pi/2])
-        # self.persuer_state = np.array([-1.2, 1.2, -np.pi/2])
         self.last_dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         info = {
             "obs": np.copy(self.evader_state),

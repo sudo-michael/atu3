@@ -45,8 +45,8 @@ register(
 )
 
 register(
-    id="Safe-Air6d-NoWalls-v0",
+    id="Safe-Air6d-NoWalls-v1",
     entry_point="atu3.envs:Air6dEnv",
     max_episode_steps=1_000,
-    kwargs={'fixed_goal' : False, 'walls': False, 'version': 1}
+    kwargs={'fixed_goal' : False, 'walls': False, 'version': 2}
 )

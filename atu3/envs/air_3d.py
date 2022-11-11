@@ -176,7 +176,6 @@ class Air3dEnv(gym.Env):
                     self.brt, self.relative_state(self.persuer_state, self.evader_state) 
                 ) > 0.2 and not self.near_goal(self.evader_state, self.goal_location):
                     break
-            print(self.evader_state)
         else:
             while True:
                 self.evader_state = np.random.uniform(

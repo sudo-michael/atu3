@@ -40,7 +40,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-Fixed-v1",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e4),
         help="total timesteps of the experiments")

@@ -17,7 +17,7 @@ sys.path.append(
 # from modules import Sine
 
 
-class Air3dEnv(gym.Env):
+class Air3dNpEnv(gym.Env):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render.modes": ["human", "rgb_array"],
@@ -54,8 +54,12 @@ class Air3dEnv(gym.Env):
             self.bottom_wall = -4.5
             self.top_wall = 4.5
         else:
+            relative_persuers = []
+            for _ in range(self.n_persuers):
+                relative_persuers.extend([10, 10, 1, 1])
+
             relative_persuers = np.array(
-                [10, 10, 1, 1] for _ in range(self.n_persuers)
+                relative_persuers
             )  # rel x rel y rel cos theta rel sin theta
             self.observation_space = gym.spaces.Box(
                 low=np.concatenate(
@@ -75,7 +79,7 @@ class Air3dEnv(gym.Env):
 
         # state
         self.evader_state = np.array([1, 1, 0])
-        self.persuer_state = np.zeros(self.n_persuers, 3)
+        self.persuer_state = np.zeros((self.n_persuers, 3))
         self.goal_location = np.array([2, 2, 0.2])
         self.goal_r = 0.4
 
@@ -152,7 +156,7 @@ class Air3dEnv(gym.Env):
             # self.generate_new_goal_location(self.evader_state)
 
         info["obs"] = np.copy(self.theta_to_cos_sin(self.evader_state))
-        info["persuer"] = np.copy(self.theta_to_cos_sin(self.persuer_state))
+        info["persuer"] = np.copy(self.theta_to_cos_sin(self.persuer_state, b=True))
         info["goal"] = np.copy(self.goal_location[:2])
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
         return (
@@ -170,8 +174,8 @@ class Air3dEnv(gym.Env):
             self.goal_location = np.random.uniform(low=-goal_bounds, high=goal_bounds)
 
         if self.fixed_goal:
-            while True:
-                for i in range(self.n_persuers):
+            for i in range(self.n_persuers):
+                while True:
                     self.persuer_state[i] = np.random.uniform(
                         low=np.array([-1, -1, -np.pi]), high=np.array([1, 1, np.pi])
                     )
@@ -195,9 +199,10 @@ class Air3dEnv(gym.Env):
                     low=np.array([-3.5, -3.5, -np.pi]), high=np.array([-3, -3, np.pi])
                 )
 
-                if self.grid.get_value(
-                    self.brt, self.relative_state(self.persuer_state, self.evader_state)
-                ) > 0.2 and not self.near_goal(self.evader_state, self.goal_location):
+                values = np.array([self.grid.get_value(self.brt, self.relative_state(self.persuer_state[i], self.evader_state)) for i in range(self.n_persuers)])
+                if np.all(
+                        values > 0.2
+                ) and not self.near_goal(self.evader_state, self.goal_location):
                     break
         else:
             while True:
@@ -384,16 +389,19 @@ class Air3dEnv(gym.Env):
         return relative_state
 
     def use_opt_ctrl(self, threshold=0.2):
+        values = np.array([self.grid.get_value(
+                self.brt, self.relative_state(self.persuer_state[i], self.evader_state)
+            ) for i in range(self.n_persuers)])
         return (
-            self.grid.get_value(
-                self.brt, self.relative_state(self.persuer_state, self.evader_state)
-            )
-            < threshold
+            np.any(values < threshold)
         )
 
     def opt_ctrl(self):
         # assert -np.pi <= self.evader_state[2] <= np.pi
-        relative_state = self.relative_state(self.persuer_state, self.evader_state)
+        # TODO temp
+        dist_to_persuer = np.linalg.norm(self.persuer_state[..., :2] - self.evader_state[:2], axis=1)
+        i = np.argmin(dist_to_persuer)
+        relative_state = self.relative_state(self.persuer_state[i], self.evader_state)
         index = self.grid.get_index(relative_state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
@@ -413,13 +421,19 @@ class Air3dEnv(gym.Env):
         return opt_dstb
 
     def get_obs(self, evader_state, persuer_state, goal):
-        relative_state = self.relative_state(persuer_state, evader_state)
-        relative_state = self.theta_to_cos_sin(relative_state)
+        relative_states = []
+        for i in range(self.n_persuers):
+            relative_state = self.relative_state(persuer_state[i], evader_state)
+            relative_state = self.theta_to_cos_sin(relative_state)
+            relative_states.extend(relative_state)
+        relative_states = np.array(relative_states, dtype=np.float32)
         relative_goal = evader_state[:2] - goal[:2]
-        dist_to_goal = np.linalg.norm(relative_goal) - self.goal_r
-        return np.concatenate((relative_state, relative_goal, dist_to_goal, goal[:2]))
+        dist_to_goal = np.array([np.linalg.norm(relative_goal) - self.goal_r])
+        return np.concatenate((relative_states, relative_goal, dist_to_goal, goal[:2]))
 
-    def theta_to_cos_sin(self, state):
+    def theta_to_cos_sin(self, state, b=False):
+        if b:
+            return np.concatenate((state[..., 0], state[..., 1], np.cos(state[..., 2]), np.sin(state[..., 2])))
         return np.array(
             [state[0], state[1], np.cos(state[2]), np.sin(state[2])], dtype=np.float32
         )
@@ -433,7 +447,7 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = gym.make("Safe-Air3d-NoWalls-Fixed-v0")
+    env = gym.make("Safe-Air3D-2p-NoWalls-Fixed-v1")
     # env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")

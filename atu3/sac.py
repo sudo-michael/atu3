@@ -50,7 +50,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
-    parser.add_argument("--batch-size", type=int, default=2048,
+    parser.add_argument("--batch-size", type=int, default=256,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
@@ -85,6 +85,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
             # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
     env = atu3.utils.AutoResetWrapper(env)
+    env = gym.wrappers.NormalizeObservation(env)
     env.seed(seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
@@ -212,7 +213,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # TRY NOT TO MODIFY: start the game
-    obs, info = env.reset()
+    obs, info = env.reset(return_info=True)
     obs = np.expand_dims(obs, axis=0) # (1, 3)
     total_unsafe = 0
     total_use_hj = 0

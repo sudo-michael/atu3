@@ -39,7 +39,7 @@ class AutoResetWrapper(gym.Wrapper):
 
         if done:
 
-            new_obs, new_info = self.env.reset()
+            new_obs, new_info = self.env.reset(return_info=True)
             assert (
                 "terminal_observation" not in new_info
             ), 'info dict cannot contain key "terminal_observation" '

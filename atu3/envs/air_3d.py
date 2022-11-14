@@ -21,10 +21,11 @@ class Air3dEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal, walls, version=1) -> None:
+    def __init__(self, fixed_goal, walls, penalize_jerk=False, version=1) -> None:
         self.return_info = True
         self.fixed_goal = fixed_goal
         self.walls=walls
+        self.penalize_jerk=False
         if version==1:
             self.car = car_brt
         elif version == 2:
@@ -98,6 +99,10 @@ class Air3dEnv(gym.Env):
         # reward = -np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
         self.last_dist_to_goal = dist_to_goal
+        
+        if self.penalize_jerk:
+            reward -= (1/60) * np.abs((action[0] - self.last_theta_dot)) / 0.05 # divide by 60 to make reward not too big
+            self.last_theta_dot = action[0]
         done = False
         info = {}
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
@@ -210,6 +215,7 @@ class Air3dEnv(gym.Env):
         # self.persuer_state = np.array([-1.2, -1.2, -np.pi/2])
         # self.persuer_state = np.array([-1.2, 1.2, -np.pi/2])
         self.last_dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
+        self.last_theta_dot = 0
         info = {
             "obs": np.copy(self.evader_state),
             "persuer": np.copy(self.persuer_state),

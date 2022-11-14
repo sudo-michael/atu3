@@ -44,6 +44,8 @@ def parse_args():
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
+    parser.add_argument("--save-every", type=int, default=100_000,
+        help="save every x steps")
     parser.add_argument("--buffer-size", type=int, default=int(1e4),
         help="the replay memory buffer size")
     parser.add_argument("--gamma", type=float, default=0.95,
@@ -73,12 +75,14 @@ def parse_args():
 
     parser.add_argument("--reward-shape-hj-takeover", type=float, default=9.4069,
         help="reward pentalty for hj takeover")
+    parser.add_argument("--penalize-jerk", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="automatic tuning of the entropy coefficient")
     args = parser.parse_args()
     # fmt: on
     return args
 
-def make_env(env_id, seed, idx, capture_video, run_name):
-    env = gym.make(env_id)
+def make_env(env_id, seed, idx, capture_video, run_name, penalize_jerk):
+    env = gym.make(env_id, penalize_jerk=args.penalize_jerk)
     env = gym.wrappers.RecordEpisodeStatistics(env)
     if capture_video:
         if idx == 0:
@@ -178,7 +182,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    env = make_env(args.env_id, args.seed, 0, args.capture_video, run_name)
+    env = make_env(args.env_id, args.seed, 0, args.capture_video, run_name, args.penalize_jerk)
     assert isinstance(env.action_space, gym.spaces.Box), "only continuous action space is supported"
 
     max_action = float(env.action_space.high[0])

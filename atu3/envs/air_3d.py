@@ -255,7 +255,7 @@ class Air3dEnv(gym.Env):
         # r of goal == self.car.r
         if tol == None:
             return (
-                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (self.goal_r + self.car_r)
+                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (self.goal_r + self.car.r)
             )
         else:
             return (

@@ -89,7 +89,7 @@ def make_env(env_id, seed, idx, capture_video, run_name, penalize_jerk):
             # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}", step_trigger=lambda e: e % 25_000 == 0)
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
     env = atu3.utils.AutoResetWrapper(env)
-    env = gym.wrappers.NormalizeObservation(env)
+    # env = gym.wrappers.NormalizeObservation(env)
     env.seed(seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)

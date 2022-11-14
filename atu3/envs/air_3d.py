@@ -26,6 +26,7 @@ class Air3dEnv(gym.Env):
         self.fixed_goal = fixed_goal
         self.walls=walls
         self.penalize_jerk=False
+        print(f"{penalize_jerk=}")
         if version==1:
             self.car = car_brt
         elif version == 2:
@@ -254,7 +255,7 @@ class Air3dEnv(gym.Env):
         # r of goal == self.car.r
         if tol == None:
             return (
-                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.goal_r
+                np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (self.goal_r + self.car_r)
             )
         else:
             return (

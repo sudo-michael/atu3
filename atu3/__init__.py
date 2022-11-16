@@ -59,7 +59,7 @@ register(
 )
 
 register(
-    id="Safe-Air3D-2p-NoWalls-Fixed-v1",
+    id="Safe-Air3d-2p-NoWalls-Fixed-v1",
     entry_point="atu3.envs:Air3dNpEnv",
     max_episode_steps=1_000,
     kwargs={'fixed_goal' : True, 'walls': False, 'version': 2, 'n_persuers': 2}

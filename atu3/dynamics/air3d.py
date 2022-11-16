@@ -3,6 +3,9 @@ import numpy as np
 import random
 
 
+# BURGER_MAX_LIN_VEL = 0.22
+# BURGER_MAX_ANG_VEL = 2.84
+
 class Air3D:
     def __init__(self, we_max=1, wp_max=1, ve=1, vp=1, r=1, u_mode="max", d_mode="min") -> None:
         # state = [x_e, y_e, theta_e, x_p, y_p, theta_p]

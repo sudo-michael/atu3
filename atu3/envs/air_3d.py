@@ -155,7 +155,7 @@ class Air3dEnv(gym.Env):
         if self.fixed_goal:
             while True:
                 self.persuer_state = np.random.uniform(
-                    low=np.array([-1, -1, -np.pi]), high=np.array([1, 1, np.pi])
+                    low=np.array([-1, -1, -np.pi]), high=np.array([0.5, 0.5, np.pi])
                 )
 
                 if not self.near_goal(self.persuer_state, self.goal_location):
@@ -172,10 +172,10 @@ class Air3dEnv(gym.Env):
 
         if self.fixed_goal:
             i = 0
-            while True and i < 10:
+            while True and i < 100:
                 i += 1
                 self.evader_state = np.random.uniform(
-                    low=np.array([-1, -1, -np.pi]), high=np.array([1.0, 1.0, np.pi])
+                    low=np.array([-2, -2, -np.pi]), high=np.array([-1.0, -1.0, np.pi])
                 )
 
                 if self.grid.get_value(

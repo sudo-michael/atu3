@@ -24,7 +24,7 @@ class Air3dNpEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal, walls, version=1, n_persuers=2) -> None:
+    def __init__(self, fixed_goal, walls, penalize_jerk=False, version=1, n_persuers=2) -> None:
         self.return_info = True
         self.fixed_goal = fixed_goal
         self.walls = walls
@@ -276,7 +276,7 @@ class Air3dNpEnv(gym.Env):
     def near_goal(self, evader_state, goal_state, tol=None):
         # r of goal == self.car.r
         if tol == None:
-            return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.goal_r
+            return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (self.goal_r + self.car.r)
         else:
             return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= tol
 

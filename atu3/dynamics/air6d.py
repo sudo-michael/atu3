@@ -1,10 +1,12 @@
 import heterocl as hcl
 import numpy as np
 
+# BURGER_MAX_LIN_VEL = 0.22
+# BURGER_MAX_ANG_VEL = 2.84
 
 class Air6D:
     def __init__(self, we_max=1, wp_max=1, ve=1, vp=1, r=1, u_mode="max", d_mode="min") -> None:
-        # state = [x_e, y_e, theta_e, x_p, y_p, theta_p]
+        # state = [x_p, y_p, theta_p, x_e, y_e, theta_e]
         self.ve = ve
         self.vp = vp
         self.we_max = we_max
@@ -113,7 +115,7 @@ class Air6D:
         thetap_dot = dstb[0]
 
         xe_dot = self.ve * np.cos(state[5])
-        ye_dot = self.ve * np.cos(state[5])
+        ye_dot = self.ve * np.sin(state[5])
         thetae_dot = ctrl[0] 
         
         return np.array([xp_dot, yp_dot, thetap_dot, xe_dot, ye_dot, thetae_dot], dtype=np.float32)

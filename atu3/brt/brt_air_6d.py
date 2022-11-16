@@ -4,20 +4,21 @@ from atu3.dynamics.air6d import Air6D
 from odp.Grid.GridProcessing import Grid
 
 grid = Grid(
-    np.array([-5, -5, -np.pi, -5, -5, -np.pi]),
-    np.array([5, 5, np.pi, 5, 5, np.pi]),
+    np.array([-2, -2, -np.pi, -2, -2, -np.pi]),
+    np.array([2, 2, np.pi, 2, 2, np.pi]),
     6,
-    np.array([30, 30, 24, 30, 30, 24]),
+    np.array([35, 35, 16, 35, 35, 16]),
+    # np.array([40, 40, 24, 40, 40, 24]) // 10,
     np.array([2, 5]),
 )
-car_r = 0.2
+car_r = 0.1
 # first 3 dim is for persuer, last 3 is for evader
-car_brt = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=1.0, vp=1.0)
+car_brt = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.84, ve=0.22, vp=0.14)
 car_brt_2 = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
 
-VERSION=2
+VERSION=1
 
-cylinder_r = car_r + car_r + 0.2
+cylinder_r = car_r + car_r
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
@@ -70,6 +71,6 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        np.save(f"./atu3/envs/assets/brts/air6d_brt_no_wall_5_30_v{version}.npy", result)
+        np.save(f"./atu3/envs/assets/brts/air6d_brt_no_wall_5_40_v{version}.npy", result)
 
     brt(VERSION)

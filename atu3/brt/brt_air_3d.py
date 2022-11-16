@@ -5,22 +5,23 @@ from odp.Grid.GridProcessing import Grid
 from odp.dynamics import DubinsCar
 
 grid = Grid(
-    np.array([-3, -3, -np.pi]),
-    np.array([3, 3, np.pi]),
+    np.array([-1, -1, -np.pi]),
+    np.array([1, 1, np.pi]),
     3,
     np.array([101, 101, 101]),
     [2],
 )
 
-car_r = 0.2
-car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.5, ve=1.0, vp=0.7)
+car_r = 0.1
+# NOTE ve != vp otherwise evader cannot excape persuer
+car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.84, ve=0.22, vp=0.14)
 car_brt_2 = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
 
 persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.vp)
 persuer_backup_brt_2 = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt_2.wp_max, speed=car_brt_2.vp)
 
 VERSION=1
-cylinder_r = car_r + car_r + 0.2
+cylinder_r = car_r + car_r
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
@@ -30,7 +31,7 @@ if __name__ in "__main__":
     ivf = CylinderShape(grid, [2], np.zeros(3), cylinder_r)
 
     def brt(version=1):
-        lookback_length = 2.0
+        lookback_length = 1.5
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
@@ -57,7 +58,7 @@ if __name__ in "__main__":
         np.save(f"./atu3/envs/assets/brts/air3d_brt_{version}.npy", result)
 
     def backup_brt(version=1):
-        lookback_length = 2.0
+        lookback_length = 1.5
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)

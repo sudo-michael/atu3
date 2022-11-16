@@ -67,9 +67,9 @@ class Air3dEnv(gym.Env):
         self.evader_state = np.array([1, 1, 0])
         self.persuer_state = np.array([-1, -1, 0])
         self.goal_location = np.array([2, 2, 0.2])
-        self.goal_r = 0.4
+        self.goal_r = 0.2
 
-        self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
+        self.world_boundary = np.array([1.0, 1.0, np.pi], dtype=np.float32)
 
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
@@ -97,7 +97,6 @@ class Air3dEnv(gym.Env):
 
         # 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
-        # reward = -np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
         self.last_dist_to_goal = dist_to_goal
         
@@ -146,7 +145,7 @@ class Air3dEnv(gym.Env):
 
     def reset(self, seed=None, return_info=True):
         if self.fixed_goal:
-            self.goal_location = np.array([2.5, 2.5])
+            self.goal_location = np.array([0.5, 0.5])
         else:
             goal_bounds = np.array([2.5, 2.5])
             self.goal_location = np.random.uniform(
@@ -176,7 +175,7 @@ class Air3dEnv(gym.Env):
             while True and i < 10:
                 i += 1
                 self.evader_state = np.random.uniform(
-                    low=np.array([-3.5, -3.5, -np.pi]), high=np.array([-3, -3, np.pi])
+                    low=np.array([-1, -1, -np.pi]), high=np.array([1.0, 1.0, np.pi])
                 )
 
                 if self.grid.get_value(
@@ -318,11 +317,11 @@ class Air3dEnv(gym.Env):
         # )
 
         if self.walls:
-            self.ax.set_xlim(-5, 5)
-            self.ax.set_ylim(-5, 5)
+            self.ax.set_xlim(-2, 2)
+            self.ax.set_ylim(-2, 2)
         else:
-            self.ax.set_xlim(-10, 10)
-            self.ax.set_ylim(-10, 10)
+            self.ax.set_xlim(-2, 2)
+            self.ax.set_ylim(-2, 2)
         self.ax.set_aspect("equal")
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")

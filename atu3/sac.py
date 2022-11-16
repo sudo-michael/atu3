@@ -40,7 +40,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3D-NoWalls-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
@@ -173,6 +173,10 @@ if __name__ == "__main__":
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
+    def save_policy(actor, step):
+        torch.save(actor.state_dict(), f"./models/{run_name}/actor_{step}.pt")
+
+
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -227,6 +231,8 @@ if __name__ == "__main__":
     success_rate = deque(maxlen=20)
     # env.unwrapped.evader_state = np.array([-3.31275266, -3.58783757,  2.64757049])
     for global_step in range(args.total_timesteps):
+        if global_step % 100_000 == 0:
+            save_policy(actor, global_step)
         # ALGO LOGIC: put action logic here
         used_hj = False
         # print(f"{info['brt_value']=} {env.unwrapped.evader_state=}")
@@ -351,6 +357,7 @@ if __name__ == "__main__":
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
+    save_policy(actor, global_step)
     writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
     writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
     writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)

@@ -25,7 +25,7 @@ class Air3dEnv(gym.Env):
         self.return_info = True
         self.fixed_goal = fixed_goal
         self.walls=walls
-        self.penalize_jerk=False
+        self.penalize_jerk = penalize_jerk
         print(f"{penalize_jerk=}")
         if version==1:
             self.car = car_brt
@@ -81,7 +81,6 @@ class Air3dEnv(gym.Env):
         self.grid = grid
 
     def step(self, action):
-        # TODO change to odeint
         self.evader_state = (
             self.car.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
             * self.dt
@@ -108,6 +107,7 @@ class Air3dEnv(gym.Env):
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
         info["cost"] = 0
         info["safe"] = True
+        info['collision'] = 'none'
 
         if not self.in_bounds(self.evader_state):
             done = True
@@ -202,7 +202,7 @@ class Air3dEnv(gym.Env):
         # self.persuer_state = np.array([0, -2, np.pi/2])
         # self.evader_state = np.array([0, 0, np.pi/2])
         # self.persuer_state = np.array([0, 2, -np.pi/2])
-        # self.evader_state = np.array([-3, -3, np.pi/4])
+        # self.evader_state = np.array([0, 1, np.pi/4])
         # self.persuer_state = np.array([2, 2, -np.pi])
         # NOT WORKING
         # self.evader_state = np.array([0, 0, -np.pi/2 * 3])

@@ -79,6 +79,11 @@ def parse_args():
         help="reward pentalty for hj takeover")
     parser.add_argument("--penalize-jerk", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+
+    parser.add_argument("--load", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="load")
+    parser.add_argument("--model-path", type=str, default="atu3",
+        help="path to saved model")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -184,6 +189,7 @@ if __name__ == "__main__":
         torch.save(actor.state_dict(), f"./models/{run_name}/actor_{step}.pt")
 
 
+
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -207,6 +213,24 @@ if __name__ == "__main__":
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
+
+    if args.load:
+        actor.load_state_dict(torch.load(args.model_path))
+        obs, info = env.reset(return_info=True)
+        obs = np.expand_dims(obs, axis=0) # (1, 3)
+
+        while True:
+            env.render()
+            if env.use_opt_ctrl():
+                actions = np.expand_dims(env.opt_ctrl(), 0)
+                # print(f'using hj: {actions}')
+                used_hj = True
+            else:
+                actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
+                actions = actions.detach().cpu().numpy() # (1, 1)
+
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, rewards, dones, info = env.step(actions[0]) # actions[0] since there's only 1 env
 
     # Automatic entropy tuning
     if args.autotune:
@@ -270,7 +294,9 @@ if __name__ == "__main__":
             writer.add_scalar("charts/total_hj", total_use_hj, global_step)
             writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
 
-            if 'collision' in info['terminal_info'].keys():
+            if info['terminal_info'].get('TimeLimit.truncated', False):
+                success_rate.append(0)
+            elif 'collision' in info['terminal_info'].keys():
                 if info['terminal_info']['collision'] == 'wall':
                     total_collide_wall += 1
                     success_rate.append(0)
@@ -280,6 +306,10 @@ if __name__ == "__main__":
                 elif info['terminal_info']['collision'] == 'goal':
                     total_reach_goal += 1
                     success_rate.append(1)
+                elif info['terminal_info']['collision'] == 'none':
+                    success_rate.append(0)
+                elif info['terminal_info']['collision'] == 'timeout':
+                    success_rate.append(0)
                 else:
                     success_rate.append(0)
 

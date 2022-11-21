@@ -27,7 +27,7 @@ class Air3dEnv(gym.Env):
         self.walls=walls
         self.penalize_jerk = penalize_jerk
         print(f"{penalize_jerk=}")
-        if version==1:
+        if version==3:
             self.car = car_brt
         elif version == 2:
             self.car = car_brt_2

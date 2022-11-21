@@ -15,12 +15,9 @@ grid = Grid(
 car_r = 0.1
 # NOTE ve != vp otherwise evader cannot excape persuer
 car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=2.00, wp_max=2.84, ve=0.22, vp=0.14)
-car_brt_2 = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
-
 persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.vp)
-persuer_backup_brt_2 = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt_2.wp_max, speed=car_brt_2.vp)
 
-VERSION=1
+VERSION=3
 cylinder_r = car_r + car_r
 
 if __name__ in "__main__":
@@ -38,7 +35,7 @@ if __name__ in "__main__":
 
         compMethods = {"TargetSetMode": "minVWithV0"}
 
-        if version == 1:
+        if version == 3:
             car = car_brt
         elif version == 2:
             car = car_brt_2

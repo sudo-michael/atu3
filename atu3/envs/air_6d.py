@@ -136,7 +136,7 @@ class Air6dEnv(gym.Env):
 
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, info
 
-    def reset(self, seed=None):
+    def reset(self, seed=None, return_info=True):
         if self.fixed_goal:
             self.goal_location = np.array([0.5, 0.5])
         else:
@@ -357,7 +357,7 @@ class Air6dEnv(gym.Env):
             relative_state = self.relative_state2(self.persuer_state, self.evader_state)
             index = self.backup_grid.get_index(relative_state)
             spat_deriv = spa_deriv(index, self.backup_brt, self.backup_grid)
-        print('b: ', spat_deriv[:3])
+        # print('b: ', spat_deriv[:3])
         opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
         return opt_dstb
         

@@ -13,7 +13,7 @@ grid = Grid(
 )
 car_r = 0.1
 # first 3 dim is for persuer, last 3 is for evader
-car_brt = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.84, ve=0.22, vp=0.14)
+car_brt = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.84, ve=0.22, vp=0.12)
 car_brt_2 = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
 
 VERSION=1

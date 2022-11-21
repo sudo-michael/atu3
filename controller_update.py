@@ -16,6 +16,56 @@ DEBUG = False
 
 THETA_OFFSET = np.pi / 2
 
+# car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=2.00, wp_max=2.84, ve=0.22, vp=0.14)
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+LOG_STD_MAX = 2
+LOG_STD_MIN = -5
+
+class Actor(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(8, 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc_mean = nn.Linear(256, 1)
+        self.fc_logstd = nn.Linear(256, 1)
+        # action rescaling
+        self.env_action_space_high = 2.00
+        self.env_action_space_low = -2.00
+        self.register_buffer("action_scale", torch.FloatTensor((self.env_action_space_high - self.env_action_space_low) / 2.0))
+        self.register_buffer("action_bias", torch.FloatTensor((self.env_action_space.high + self.env_action_space_low) / 2.0))
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        mean = self.fc_mean(x)
+        log_std = self.fc_logstd(x)
+        log_std = torch.tanh(log_std)
+        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
+
+        return mean, log_std
+
+    def get_action(self, x):
+        mean, log_std = self(x)
+        std = log_std.exp()
+        normal = torch.distributions.Normal(mean, std)
+        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+        log_prob = normal.log_prob(x_t)
+        # Enforcing Action Bound
+        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
+        log_prob = log_prob.sum(1, keepdim=True)
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        return action, log_prob, mean
+
+model_path =  "./models/Safe-Air3d-NoWalls-Fixed-v3__sac__3__1669027857/actor_999999.pt"
+actor = Actor()
+actor.load_state_dict(torch.load(model_path))
 class Controller:
     def __init__(self, id, vicon_topic, tb_cmd_vel_topic, type="pursuer"):
         self.type = type
@@ -28,12 +78,16 @@ class Controller:
 
         rospy.loginfo(f"starting subscriber for {self.vicon_topic}")
         print('starting up')
+        # TODO create seperate callbacks for persuer and evader
+        # callback_persuer should use control from Actor
+        # the observation should be from self.get_obs(...) from air_3d.
+        # callback_evader should use control from brt, like what's currently being done in the current callback
         rospy.Subscriber(self.vicon_topic, TransformStamped, self.callback, queue_size=1)
         self.publisher = rospy.Publisher(self.tb_cmd_vel_topic, Twist, queue_size=1)
         
         # TODO set rate of sublisher
         if self.type == "pursuer":
-            version = "1"
+            version = "3"
             self.brt = np.load(f"./atu3/envs/assets/brts/air3d_brt_{version}.npy")
             self.backup_brt = np.load(f"./atu3/envs/assets/brts/backup_air3d_brt_{version}.npy")
             self.grid = grid
@@ -87,7 +141,7 @@ class Controller:
             vel_msg.angular.z = 0.0
         else:
             vel_msg = Twist()
-            vel_msg.linear.x = 0.22
+            vel_msg.linear.x = 0.22 # cha
             vel_msg.angular.z = opt_ctrl[0]
         self.publisher.publish(vel_msg)
 

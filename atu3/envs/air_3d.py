@@ -100,7 +100,7 @@ class Air3dEnv(gym.Env):
         self.last_dist_to_goal = dist_to_goal
         
         if self.penalize_jerk:
-            reward -= (1/60) * np.abs((action[0] - self.last_theta_dot)) / 0.05 # divide by 60 to make reward not too big
+            reward -= (1/120) * np.abs((action[0] - self.last_theta_dot)) / 0.05 # divide by 60 to make reward not too big
             self.last_theta_dot = action[0]
         done = False
         info = {}

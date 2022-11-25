@@ -54,7 +54,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
-    parser.add_argument("--batch-size", type=int, default=256,
+    parser.add_argument("--batch-size", type=int, default=512,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
@@ -75,14 +75,14 @@ def parse_args():
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
 
-    parser.add_argument("--reward-shape-hj-takeover", type=float, default=9.4069,
+    parser.add_argument("--reward-shape-hj-takeover", type=float, default=0.005,
         help="reward pentalty for hj takeover")
     parser.add_argument("--penalize-jerk", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
 
     parser.add_argument("--load", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
         help="load")
-    parser.add_argument("--model-path", type=str, default="atu3",
+    parser.add_argument("--model-path", type=str, default="./models/Safe-Air3d-NoWalls-Fixed-v3__sac__3__1669027857/actor_999999.pt",
         help="path to saved model")
     args = parser.parse_args()
     # fmt: on

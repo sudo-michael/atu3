@@ -87,14 +87,12 @@ class Air3dEnv(gym.Env):
             + self.evader_state
         )
         self.evader_state[2] = normalize_angle(self.evader_state[2])
-        self.persuer_state = (
-            self.car.dynamics_non_hcl(0, self.persuer_state, self.opt_dstb(), is_evader=False)
-            * self.dt
-            + self.persuer_state
-        )
-        self.persuer_state[2] = normalize_angle(self.persuer_state[2])
-
-        # 
+        # self.persuer_state = (
+        #     self.car.dynamics_non_hcl(0, self.persuer_state, self.opt_dstb(), is_evader=False)
+        #     * self.dt
+        #     + self.persuer_state
+        # )
+        # self.persuer_state[2] = normalize_angle(self.persuer_state[2])
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
         self.last_dist_to_goal = dist_to_goal
@@ -195,7 +193,7 @@ class Air3dEnv(gym.Env):
 
         # self.evader_state = np.array([0, 0, 0])
         # self.evader_state = np.array([0, 0, 0])
-        # self.persuer_state = np.array([-2, 0, 0])
+        self.persuer_state = np.array([0, 0, 0])
         # self.evader_state = np.array([0, 0, 0.68])
         # self.persuer_state = np.array([2, 2, -0.30])
         # self.evader_state = np.array([0, 0, -np.pi/2])
@@ -210,7 +208,7 @@ class Air3dEnv(gym.Env):
         # self.evader_state = np.array([0, 0, 0])
         # self.persuer_state = np.array([-1, -1, -3 * np.pi/4])
         # self.persuer_state = np.array([-1, 0, np.pi])
-        # self.evader_state = np.array([0, 0, np.pi/4])
+        # self.evader_state = np.array([0, -1, 0])
         # self.persuer_state = np.array([-1.2, 0, -np.pi/4])
         # self.persuer_state = np.array([-1.2, -1.2, -np.pi/2])
         # self.persuer_state = np.array([-1.2, 1.2, -np.pi/2])
@@ -223,6 +221,7 @@ class Air3dEnv(gym.Env):
             "brt_value": self.grid.get_value(self.brt, self.evader_state)
         }
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), info
+        # return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal']))
 
     def generate_new_goal_location(self, evader_state):
         while True:

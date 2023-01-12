@@ -2,8 +2,7 @@ from gym.envs.registration import register
 import numpy as np
 
 register(
-    id="Safe-Air3d-NoWalls-Fixed-v3",
-    entry_point="atu3.envs:Air3dEnv",
+    id="Safe-Air3d-NoWalls-Fixed-v3", entry_point="atu3.envs:Air3dEnv",
     max_episode_steps=1_000,
     kwargs={'fixed_goal' : True, 'walls': False, 'version': 3}
 )

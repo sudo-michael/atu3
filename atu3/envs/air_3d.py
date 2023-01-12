@@ -52,8 +52,12 @@ class Air3dEnv(gym.Env):
             self.top_wall = 4.5
         else:
             self.observation_space = gym.spaces.Box(
-                low=np.array([-10, -10, -1, -1, -10, -10, -10, -10]),
-                high=np.array([10, 10, 1, 1, 10, 10, 10, 10]),
+                low=np.array([-10, -10, -1, -1, 
+                              -10, -10, -10, -10]),
+                high=np.array([10, 10, 1, 1, 
+                               10, 10, 10, 10]),
+                # low=np.array([-10, -10, -1, -1, -10, -10, -10, -10]),
+                # high=np.array([10, 10, 1, 1, 10, 10, 10, 10]),
                 dtype=np.float32
             )
             self.world_width = 10
@@ -94,7 +98,7 @@ class Air3dEnv(gym.Env):
         # )
         # self.persuer_state[2] = normalize_angle(self.persuer_state[2])
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
-        reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
+        reward = (self.last_dist_to_goal - dist_to_goal)
         self.last_dist_to_goal = dist_to_goal
         
         if self.penalize_jerk:
@@ -126,7 +130,7 @@ class Air3dEnv(gym.Env):
             info["safe"] = False
             info["collision"] = "persuer"
             info["cost"] = 1
-            # reward = -250
+            reward = -5
         elif self.near_goal(self.evader_state, self.goal_location):
             done = True
             info["collision"] = 'goal'
@@ -193,7 +197,7 @@ class Air3dEnv(gym.Env):
 
         # self.evader_state = np.array([0, 0, 0])
         # self.evader_state = np.array([0, 0, 0])
-        self.persuer_state = np.array([0, 0, 0])
+        # self.persuer_state = np.array([0, 0, 0])
         # self.evader_state = np.array([0, 0, 0.68])
         # self.persuer_state = np.array([2, 2, -0.30])
         # self.evader_state = np.array([0, 0, -np.pi/2])
@@ -390,6 +394,8 @@ class Air3dEnv(gym.Env):
     def get_obs(self, evader_state, persuer_state, goal):
         relative_state = self.relative_state(persuer_state, evader_state)
         relative_state = self.theta_to_cos_sin(relative_state)
+        # es = self.theta_to_cos_sin(evader_state)
+        # ps = self.theta_to_cos_sin(persuer_state)
         relative_goal = evader_state[:2] - goal[:2]
         return np.concatenate((relative_state, relative_goal, goal[:2]))
         
@@ -409,7 +415,7 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = gym.make("Safe-Air3d-NoWalls-Fixed-v0")
+    env = gym.make("Safe-Air3d-NoWalls-Fixed-v3")
     # env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")
@@ -434,7 +440,4 @@ if __name__ in "__main__":
 
         env.render()
     env.close()
-
-
-
 

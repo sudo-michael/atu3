@@ -50,7 +50,7 @@ def parse_args():
         help="save every x steps")
     parser.add_argument("--buffer-size", type=int, default=int(1e5),
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.95,
+    parser.add_argument("--gamma", type=float, default=0.9,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
@@ -162,6 +162,7 @@ class Actor(nn.Module):
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    print(run_name)
     if args.track:
         import wandb
 

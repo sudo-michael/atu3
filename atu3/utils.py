@@ -38,7 +38,6 @@ class AutoResetWrapper(gym.Wrapper):
         obs, reward, done, info = self.env.step(action)
 
         if done:
-
             new_obs, new_info = self.env.reset(return_info=True)
             assert (
                 "terminal_observation" not in new_info

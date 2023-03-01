@@ -1,5 +1,4 @@
 import numpy as np
-import odp
 from atu3.dynamics.DubinsCar import DubinsCar
 from odp.Grid.GridProcessing import Grid
 
@@ -12,7 +11,7 @@ g = Grid(
 )
 car_r = 0.5
 car_brt = DubinsCar(r=car_r, uMode="max", dMode="min", wMax=1.5)
-cylinder_r = car_r + car_r + 0.2
+cylinder_r = car_r + 0.1 # cylinder is another car, 0.1 for some extra space
 
 if __name__ in "__main__":
     from odp.Shapes.ShapesFunctions import *
@@ -20,23 +19,6 @@ if __name__ in "__main__":
     from odp.solver import HJSolver
 
     ivf = CylinderShape(g, [2], np.zeros(3), cylinder_r)
-
-    # ivf = Union(
-    #     ivf,
-    #     Union(
-    #         Lower_Half_Space(g, 0, -4.5 + car_r), Upper_Half_Space(g, 0, 4.5 - car_r + extra_room)
-
-            
-    #     ),
-    # )
-
-    # # y walls
-    # ivf = Union(
-    #     ivf,
-    #     Union(
-    #         Lower_Half_Space(g, 1, -4.5 + car_r), Upper_Half_Space(g, 1, 4.5 - car_r + extra_room)
-    #     ),
-    # )
 
     def brt(d=True):
         lookback_length = 5.0

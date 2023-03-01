@@ -334,7 +334,7 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = gym.make("Safe-Air3d-NoWalls-v0")
+    env = gym.make("Safe-GoalAir3d-NoWalls-v0")
     # env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")

@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from atu3.utils import normalize_angle, spa_deriv
+from atu3.brt.brt_air_3d import grid as backup_grid
 from atu3.brt.brt_air_6d import car_brt, grid
 import torch
 
@@ -21,10 +22,11 @@ class Air6dEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal=False, walls=False, version=2) -> None:
+    def __init__(self, fixed_goal=False, walls=False, penalize_jerk=False, version=1) -> None:
         self.fixed_goal = fixed_goal
         self.walls=walls
         self.car = car_brt
+        self.penalize_jerk = penalize_jerk
         self.dt = 0.05
 
         self.action_space = gym.spaces.Box(
@@ -46,10 +48,10 @@ class Air6dEnv(gym.Env):
             self.top_wall = 4.5
         else:
             self.observation_space = gym.spaces.Box(
-                # low=np.array([-10, -10, -1, -1, -10, -10]),
-                # high=np.array([10, 10, 1, 1, 10, 10]),
-                low=np.array([-5, -5, -1, -1, -5, -5]),
-                high=np.array([5, 5, 1, 1, 5, 5]),
+                low=np.array([-10, -10, -1, -1, -10, -10]),
+                high=np.array([10, 10, 1, 1, 10, 10]),
+                # low=np.array([-5, -5, -1, -1, -5, -5]),
+                # high=np.array([5, 5, 1, 1, 5, 5]),
                 dtype=np.float32
             )
             self.world_width = 10
@@ -64,16 +66,17 @@ class Air6dEnv(gym.Env):
         self.persuer_state = np.array([-1, -1, 0])
         self.goal_location = np.array([2, 2, 0.2])
 
-        self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
+        self.world_boundary = np.array([2, 2, np.pi], dtype=np.float32)
 
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
         path = os.path.abspath(__file__)
         dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, f"assets/brts/air6d_brt_no_wall_5_30_v{version}.npy"))
+        self.brt = np.load(os.path.join(dir_path, f"assets/brts/air6d_brt_no_wall_5_40_v{version}.npy"))
         self.backup_brt = np.load(os.path.join(dir_path, f"assets/brts/backup_air3d_brt_{version}.npy"))
 
         self.grid = grid
+        self.backup_grid = backup_grid
 
     def step(self, action):
         # TODO change to odeint
@@ -133,9 +136,9 @@ class Air6dEnv(gym.Env):
 
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, info
 
-    def reset(self, seed=None):
+    def reset(self, seed=None, return_info=True):
         if self.fixed_goal:
-            self.goal_location = np.array([2.5, 2.5])
+            self.goal_location = np.array([0.5, 0.5])
         else:
             goal_bounds = np.array([2.5, 2.5])
             self.goal_location = np.random.uniform(
@@ -152,15 +155,16 @@ class Air6dEnv(gym.Env):
             
 
         if self.fixed_goal:
-            while True:
-                # choose to be "close" ish to goal
+            i = 0
+            while True and i < 100:
+                i += 1
                 self.evader_state = np.random.uniform(
-                    low=-np.array([1.5, 1.5, np.pi], dtype=np.float32), high=np.array([1.5, 1.5, np.pi], dtype=np.float32)
+                    low=np.array([-2, -2, -np.pi]), high=np.array([-1.0, -1.0, np.pi])
                 )
 
                 if self.grid.get_value(
-                    self.brt, self.evader_state
-                ) > 0.5 and not self.near_goal(self.evader_state, self.goal_location) and not self.near_persuer(self.evader_state, self.persuer_state):
+                    self.brt, self.relative_state(self.persuer_state, self.evader_state) 
+                ) > 0.2 and not self.near_goal(self.evader_state, self.goal_location):
                     break
         else:
             while True:
@@ -201,6 +205,9 @@ class Air6dEnv(gym.Env):
             "goal": np.copy(self.goal_location[:2]),
             "brt_value": self.grid.get_value(self.brt, self.evader_state)
         }
+        
+        # self.evader_state = np.array([0, 0, -np.pi * 3/4])
+        # self.persuer_state = np.array([-2, -2, 0])
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), info
 
     def generate_new_goal_location(self, evader_state):
@@ -285,22 +292,23 @@ class Air6dEnv(gym.Env):
         # self.ax.contour(
         #     Xr + self.evader_state[0],
         #     Yr + self.evader_state[1],
-        #     self.brt[:, :, index[2]],
+        #     self.brt[:, :, index[5]],
         #     levels=[0.1],
         # )
-        # self.ax.contour(
-        #     X,
-        #     Y,
-        #     self.brt[index[0], index[1], index[2], :, :, index[5]],
-        #     levels=[0.6],
-        # )
+        self.ax.contour(
+            X,
+            Y,
+            self.brt[index[0], index[1], index[2], :, :, index[5]],
+            levels=[0.1],
+        )
 
         if self.walls:
             self.ax.set_xlim(-5, 5)
             self.ax.set_ylim(-5, 5)
         else:
-            self.ax.set_xlim(-10, 10)
-            self.ax.set_ylim(-10, 10)
+            self.ax.set_xlim(-3, 3)
+            self.ax.set_ylim(-3, 3)
+
         self.ax.set_aspect("equal")
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")
@@ -329,7 +337,7 @@ class Air6dEnv(gym.Env):
         relative_state[2] = persuer_state[2]
         return relative_state
 
-    def use_opt_ctrl(self, threshold=0.6):
+    def use_opt_ctrl(self, threshold=0.2):
         # print(f'v: {self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state))}')
         return self.grid.get_value(self.brt, self.state(self.persuer_state, self.evader_state)) < threshold
 
@@ -347,11 +355,10 @@ class Air6dEnv(gym.Env):
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         if spat_deriv[2] == 0:
             relative_state = self.relative_state2(self.persuer_state, self.evader_state)
-            index = self.grid.get_index(relative_state)
-            spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
-            # print('b: ', spat_deriv[:3])
+            index = self.backup_grid.get_index(relative_state)
+            spat_deriv = spa_deriv(index, self.backup_brt, self.backup_grid)
+        # print('b: ', spat_deriv[:3])
         opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
-        # print(opt_dstb)
         return opt_dstb
         
 
@@ -383,7 +390,7 @@ if __name__ in "__main__":
     # env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")
-    env = Air6dEnv(walls=True)
+    env = Air6dEnv(walls=False, fixed_goal=True)
     obs = env.reset()
     done = False
     while not done:
@@ -396,6 +403,7 @@ if __name__ in "__main__":
         _, _, _, info = env.step(action)
 
         obs, reward, done, info = env.step(action)
+        done = False
         if done:
             print(info)
             print('done')
@@ -403,7 +411,3 @@ if __name__ in "__main__":
 
         env.render()
     env.close()
-
-
-
-

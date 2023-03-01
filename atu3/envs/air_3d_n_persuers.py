@@ -3,19 +3,40 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from atu3.utils import normalize_angle, spa_deriv
-from atu3.brt.brt_air_3d import car_brt, grid, car_brt_2
+from atu3.brt.brt_air_3d import car_brt, grid, car_brt_2, car_brt_3
 import torch
 
 import sys
 
 sys.path.append(
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../../siren-reach")
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../../../siren-reach")
 )
 
-# siren-reach
-# import modules
-# from modules import Sine
+# load confing into dataclasas like structure thing
+import json
+with open("./atu3/envs/assets/config/brt_1e2p.json", 'r') as f:
+    opt = f.read() 
+opt = json.loads(opt)
+for k, v in opt.items():
+    if k[0] != '_':
+        opt[k] = v['value']
+opt.pop('_wandb')
+from collections import namedtuple
+opt = namedtuple('opt', opt.keys())(*opt.values())
 
+
+import modules, dataio, diff_operators
+dataset = dataio.Reachability1E2PSource(numpoints=65000, tMin=opt.tMin, tMax=opt.tMax,
+                                        counter_start=opt.counter_start, counter_end=opt.counter_end,
+                                        collisionR=opt.collisionR, velocitye=opt.velocitye, velocityp=opt.velocityp, omegaMaxe=opt.omegaMaxe,omegaMaxp=opt.omegaMaxp, diffModel=opt.diffModel,
+                                        pretrain=opt.pretrain, pretrain_iters=opt.pretrain_iters, num_src_samples=opt.num_src_samples)
+model = modules.SingleBVPNet(in_features=13, out_features=1, type=opt.model, mode=opt.mode,
+                            final_layer_factor=1., hidden_features=opt.num_nl, num_hidden_layers=opt.num_hl, 
+                            input_transform_function=dataset.input_transform_function)
+model.cuda()
+# torch.load("../../siren-reach/logs/BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v2/checkpoints/model_final.pth")
+# model.load_state_dict(torch.load("../../siren-reach/logs/BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v3/checkpoints/model_final.pth"))
+model.load_state_dict(torch.load("../../siren-reach/logs/BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v2/checkpoints/model_final.pth"))
 
 class Air3dNpEnv(gym.Env):
     metadata = {
@@ -24,16 +45,20 @@ class Air3dNpEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal, walls, version=1, n_persuers=2) -> None:
+    def __init__(self, fixed_goal, walls, penalize_jerk=False, version=1, n_persuers=2, use_deepreach=False) -> None:
         self.return_info = True
         self.fixed_goal = fixed_goal
         self.walls = walls
+        self.penalize_jerk = penalize_jerk
+        self.use_deepreach = use_deepreach
         self.n_persuers = n_persuers
 
         if version == 1:
             self.car = car_brt
         elif version == 2:
             self.car = car_brt_2
+        elif version == 3:
+            self.car = car_brt
         self.dt = 0.05
 
         self.action_space = gym.spaces.Box(
@@ -81,9 +106,9 @@ class Air3dNpEnv(gym.Env):
         self.evader_state = np.array([1, 1, 0])
         self.persuer_state = np.zeros((self.n_persuers, 3))
         self.goal_location = np.array([2, 2, 0.2])
-        self.goal_r = 0.4
+        self.goal_r = 0.2
 
-        self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
+        self.world_boundary = np.array([1.0, 1.0, np.pi], dtype=np.float32)
 
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
@@ -99,33 +124,50 @@ class Air3dNpEnv(gym.Env):
         self.grid = grid
 
     def step(self, action):
-        # TODO change to odeint
         self.evader_state = (
             self.car.dynamics_non_hcl(0, self.evader_state, action, is_evader=True)
             * self.dt
             + self.evader_state
         )
         self.evader_state[2] = normalize_angle(self.evader_state[2])
-        for i in range(self.n_persuers):
+        # DBG
+        obs = self.get_deepreach_obs()
+        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_output = model(model_input)
+
+        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
+        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        # print(f'value: {y.item()}')
+        du, status = diff_operators.jacobian(y, x)
+        dudt = du[..., 0, 0]
+        dudx = du[..., 0, 1:]
+        # print(dudx[0, 0, -3:])
+
+        for i, opt_dstb in enumerate(self.opt_dstb()):
+            # if i == 1:
+            #     continue
             self.persuer_state[i] = (
                 self.car.dynamics_non_hcl(
-                    0, self.persuer_state[i], self.opt_dstb(i), is_evader=False
+                    0, self.persuer_state[i], opt_dstb, is_evader=False
                 )
                 * self.dt
                 + self.persuer_state[i]
             )
             self.persuer_state[i][2] = normalize_angle(self.persuer_state[i][2])
 
-        #
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
-        # reward = -np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = (self.last_dist_to_goal - dist_to_goal) * 1.1
         self.last_dist_to_goal = dist_to_goal
+
+        if self.penalize_jerk:
+            reward -= (1/120) * np.abs((action[0] - self.last_theta_dot)) / 0.05 # divide by 60 to make reward not too big
+            self.last_theta_dot = action[0]
         done = False
         info = {}
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
         info["cost"] = 0
         info["safe"] = True
+        info['collision'] = 'none'
 
         if not self.in_bounds(self.evader_state):
             done = True
@@ -137,10 +179,9 @@ class Air3dNpEnv(gym.Env):
             else:
                 info["collision"] = "timeout"
         elif self.near_persuers(self.evader_state, self.persuer_state):
-            # breakpoint()
             print("collision")
-            # print(f"{self.evader_state=}")
-            # print(f"{self.persuer_state=}")
+            print(f"{self.evader_state=}")
+            print(f"{self.persuer_state=}")
             # print(self.relative_state(self.persuer_state, self.evader_state))
             done = True
             info["safe"] = False
@@ -168,54 +209,56 @@ class Air3dNpEnv(gym.Env):
 
     def reset(self, seed=None, return_info=True):
         if self.fixed_goal:
-            self.goal_location = np.array([2.5, 2.5])
+            self.goal_location = np.array([0.5, 0.5])
         else:
             goal_bounds = np.array([2.5, 2.5])
             self.goal_location = np.random.uniform(low=-goal_bounds, high=goal_bounds)
 
-        if self.fixed_goal:
-            for i in range(self.n_persuers):
-                while True:
-                    self.persuer_state[i] = np.random.uniform(
-                        low=np.array([-1, -1, -np.pi]), high=np.array([1, 1, np.pi])
-                    )
+        # if self.fixed_goal:
+        #     for i in range(self.n_persuers):
+        #         while True:
+        #             self.persuer_state[i] = np.random.uniform(
+        #                 low=np.array([-1, -1, -np.pi]), high=np.array([1, 1, np.pi])
+        #             )
 
-                    if not self.near_goal(self.persuer_state[i], self.goal_location):
-                        break
-        else:
-            while True:
-                self.persuer_state = np.random.uniform(
-                    low=-self.world_boundary, high=self.world_boundary
-                )
+        #             if not self.near_goal(self.persuer_state[i], self.goal_location):
+        #                 break
+        # else:
+        #     while True:
+        #         self.persuer_state = np.random.uniform(
+        #             low=-self.world_boundary, high=self.world_boundary
+        #         )
 
-                if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
-                    break
+        #         if not self.near_goal(self.persuer_state, self.goal_location, 1.0):
+        #             break
 
-        if self.fixed_goal:
-            i = 0
-            while True and i < 10:
-                i += 1
-                self.evader_state = np.random.uniform(
-                    low=np.array([-3.5, -3.5, -np.pi]), high=np.array([-3, -3, np.pi])
-                )
+        # if self.fixed_goal:
+        #     i = 0
+        #     while True and i < 10:
+        #         i += 1
+        #         self.evader_state = np.random.uniform(
+        #             low=np.array([-3.5, -3.5, -np.pi]), high=np.array([-3, -3, np.pi])
+        #         )
 
-                values = np.array([self.grid.get_value(self.brt, self.relative_state(self.persuer_state[i], self.evader_state)) for i in range(self.n_persuers)])
-                if np.all(
-                        values > 0.2
-                ) and not self.near_goal(self.evader_state, self.goal_location):
-                    break
-        else:
-            while True:
-                self.evader_state = np.random.uniform(
-                    low=-self.world_boundary, high=self.world_boundary
-                )
+        #         values = np.array([self.grid.get_value(self.brt, self.relative_state(self.persuer_state[i], self.evader_state)) for i in range(self.n_persuers)])
+        #         if np.all(
+        #                 values > 0.2
+        #         ) and not self.near_goal(self.evader_state, self.goal_location):
+        #             break
+        # else:
+        #     while True:
+        #         self.evader_state = np.random.uniform(
+        #             low=-self.world_boundary, high=self.world_boundary
+        #         )
 
-                if self.grid.get_value(
-                    self.brt, self.relative_state(self.persuer_state, self.evader_state)
-                ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
-                    break
+        #         if self.grid.get_value(
+        #             self.brt, self.relative_state(self.persuer_state, self.evader_state)
+        #         ) > 0.3 and not self.near_goal(self.evader_state, self.goal_location):
+        #             break
 
-        # self.evader_state = np.array([0, 0, 0])
+        self.evader_state = np.array([0, 0, 0])
+        self.persuer_state[1] = np.array([3, 0, 0.0])
+        self.persuer_state[0] = np.array([-3, 0, -np.pi])
         # self.evader_state = np.array([0, 0, 0])
         # self.persuer_state = np.array([-2, 0, 0])
         # self.evader_state = np.array([0, 0, 0.68])
@@ -258,6 +301,37 @@ class Air3dNpEnv(gym.Env):
             ) > 0.3 and not self.near_goal(evader_state, self.goal_location):
                 break
 
+    def get_deepreach_obs(self, persuer_1_first=True):
+        alpha = dataset.alpha
+        if persuer_1_first:
+            x_normalized = np.array([[
+                3.0,
+                self.evader_state[0], self.evader_state[1],
+                self.persuer_state[0][0], self.persuer_state[0][1],
+                self.persuer_state[1][0], self.persuer_state[1][1], 
+                self.evader_state[2], self.persuer_state[0][2], self.persuer_state[1][2]
+            ]])
+        else:
+            x_normalized = np.array([[
+                3.0,
+                self.evader_state[0], self.evader_state[1],
+                self.persuer_state[1][0], self.persuer_state[1][1],
+                self.persuer_state[0][0], self.persuer_state[0][1], 
+                self.evader_state[2], self.persuer_state[1][2], self.persuer_state[0][2]
+            ]])
+
+        x_normalized[..., 1] = x_normalized[..., 1] / alpha['x']
+        x_normalized[..., 2] = x_normalized[..., 2] / alpha['y']
+        x_normalized[..., 3] = x_normalized[..., 3] / alpha['x']
+        x_normalized[..., 4] = x_normalized[..., 4] / alpha['y']
+        x_normalized[..., 5] = x_normalized[..., 5] / alpha['x']
+        x_normalized[..., 6] = x_normalized[..., 6] / alpha['y']
+        x_normalized[..., 7] = x_normalized[..., 7] / alpha['th']
+        x_normalized[..., 8] = x_normalized[..., 8] / alpha['th']
+        x_normalized[..., 9] = x_normalized[..., 9] / alpha['th']
+
+        return x_normalized
+
     def in_bounds(self, evader_state):
         if not (
             self.left_wall + self.car.r
@@ -276,7 +350,7 @@ class Air3dNpEnv(gym.Env):
     def near_goal(self, evader_state, goal_state, tol=None):
         # r of goal == self.car.r
         if tol == None:
-            return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= self.goal_r
+            return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (self.goal_r + self.car.r)
         else:
             return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= tol
 
@@ -304,9 +378,12 @@ class Air3dNpEnv(gym.Env):
 
         add_robot(self.evader_state, color="blue")
         for i in range(self.n_persuers):
-            add_robot(self.persuer_state[i], color="red")
+            if i == 0:
+                add_robot(self.persuer_state[i], color="red")
+            elif i == 1:
+                add_robot(self.persuer_state[i], color="orange")
         goal = plt.Circle(self.goal_location[:2], radius=self.goal_r, color="g")
-        self.ax.add_patch(goal)
+        # self.ax.add_patch(goal)
 
         # walls
         if self.walls:
@@ -318,6 +395,25 @@ class Air3dNpEnv(gym.Env):
             np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
             indexing="ij",
         )
+
+        # obs = self.get_deepreach_obs()[0]
+        # t = torch.ones(X.shape[0]**2, 1) * obs[0]
+        # # xe = torch.ones(X.shape[0], 1) * obs[1]
+        # # ye = torch.ones(X.shape[0], 1) * obs[2]
+        # xe = torch.tensor(X.reshape(-1, 1)) / dataset.alpha['x']
+        # ye = torch.tensor(Y.reshape(-1, 1)) / dataset.alpha['y']
+        # xp = torch.ones(X.shape[0]**2, 1) * obs[3] / dataset.alpha['x']
+        # yp = torch.ones(X.shape[0]**2, 1) * obs[4] / dataset.alpha['y']
+        # xp2 = torch.ones(X.shape[0]**2, 1) * obs[5] / dataset.alpha['x']
+        # yp2 = torch.ones(X.shape[0]**2, 1) * obs[6] / dataset.alpha['y']
+        # te = torch.ones(X.shape[0]**2, 1) * obs[7]/ dataset.alpha['th']
+        # tp = torch.ones(X.shape[0]**2, 1) * obs[8]/ dataset.alpha['th']
+        # tp2 = torch.ones(X.shape[0]**2, 1) * obs[9]/ dataset.alpha['th']
+        # # coords = torch.cat((time_coords, mgrid_coords, one_coords / 3.0, zero_coords, -one_coords / 3.0, zero_coords, zero_coords, theta_coords, theta_coords), dim=1) 
+        # mgrid_coords = dataio.get_mgrid(sidelen)
+        # model_input = {'coords': torch.FloatTensor(coords).cuda()}
+        # model_output = model(model_input)
+        # breakpoint()
 
         # relative_state = self.relative_state(self.persuer_state, self.evader_state)
         # index = self.grid.get_index(relative_state)
@@ -335,16 +431,17 @@ class Air3dNpEnv(gym.Env):
         # self.ax.contour(
         #     X,
         #     Y,
-        #     self.brt[:, :, index[2]],
         #     levels=[0.1],
         # )
 
-        if self.walls:
-            self.ax.set_xlim(-5, 5)
-            self.ax.set_ylim(-5, 5)
-        else:
-            self.ax.set_xlim(-10, 10)
-            self.ax.set_ylim(-10, 10)
+        # if self.walls:
+        #     self.ax.set_xlim(-5, 5)
+        #     self.ax.set_ylim(-5, 5)
+        # else:
+
+        self.ax.set_xlim(-3, 3)
+        self.ax.set_ylim(-3, 3)
+
         self.ax.set_aspect("equal")
         self.ax.set_xlabel("x")
         self.ax.set_ylabel("y")
@@ -389,36 +486,16 @@ class Air3dNpEnv(gym.Env):
         return relative_state
 
     def use_opt_ctrl(self, threshold=0.2):
-        values = np.array([self.grid.get_value(
-                self.brt, self.relative_state(self.persuer_state[i], self.evader_state)
-            ) for i in range(self.n_persuers)])
-        return (
-            np.any(values < threshold)
-        )
+        value = self.get_value()
+        print(value)
+        return value < threshold
 
     def opt_ctrl(self):
         # assert -np.pi <= self.evader_state[2] <= np.pi
-        # TODO temp
-        dist_to_persuer = np.linalg.norm(self.persuer_state[..., :2] - self.evader_state[:2], axis=1)
-        i = np.argmin(dist_to_persuer)
-        relative_state = self.relative_state(self.persuer_state[i], self.evader_state)
-        index = self.grid.get_index(relative_state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid)
-        opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
-        return opt_ctrl
+        return self.get_opt_ctrl()
 
-    def opt_dstb(self, i):
-        relative_state = self.relative_state(self.persuer_state[i], self.evader_state)
-        index = self.grid.get_index(relative_state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid)
-        if spat_deriv[2] == 0:
-            relative_state = self.relative_state2(
-                self.persuer_state[i], self.evader_state
-            )
-            index = self.grid.get_index(relative_state)
-            spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
-        opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
-        return opt_dstb
+    def opt_dstb(self):
+        return self.get_opt_dstb()
 
     def get_obs(self, evader_state, persuer_state, goal):
         relative_states = []
@@ -437,6 +514,72 @@ class Air3dNpEnv(gym.Env):
         return np.array(
             [state[0], state[1], np.cos(state[2]), np.sin(state[2])], dtype=np.float32
         )
+    
+    def get_opt_dstb(self):
+        obs = self.get_deepreach_obs()
+        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_output = model(model_input)
+
+        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
+        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        du, status = diff_operators.jacobian(y, x)
+        dudt = du[..., 0, 0]
+        dudx = du[..., 0, 1:]
+        _, p1_dstb, _ = dataset.compute_overall_ham(x[..., 1:], dudx, return_opt_ctrl=True)
+        p1_dstb = p1_dstb.item()
+
+        obs = self.get_deepreach_obs(persuer_1_first=False)
+        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_output = model(model_input)
+
+        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
+        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        du, status = diff_operators.jacobian(y, x)
+        dudt = du[..., 0, 0]
+        dudx = du[..., 0, 1:]
+        _, p2_dstb, _ = dataset.compute_overall_ham(x[..., 1:], dudx, return_opt_ctrl=True)
+        p2_dstb = p2_dstb.item()
+        return np.array([p1_dstb]), np.array([p2_dstb])
+    
+    def get_opt_ctrl(self):
+        obs = self.get_deepreach_obs()
+        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_output = model(model_input)
+
+        # opt_disb        
+        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
+        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        du, status = diff_operators.jacobian(y, x)
+        dudt = du[..., 0, 0]
+        dudx = du[..., 0, 1:]
+        opt_ctrl, _, _ = dataset.compute_vehicle_ham(x[..., 1:], dudx, return_opt_ctrl=True)
+        return np.array([opt_ctrl.item()])
+
+    def get_value(self):
+        obs = self.get_deepreach_obs()
+        # normalize obs
+        norm_obs = self.normalize_deepreach_obs(obs)
+        with torch.no_grad():
+            model_input = {'coords': torch.Tensor(norm_obs).cuda()}
+            model_out = model(model_input)
+        model_out = model_out['model_out']
+        model_out = (model_out*dataset.var/dataset.norm_to) + dataset.mean 
+        value = model_out.item()
+        return value
+
+    def normalize_deepreach_obs(self, obs):
+        obs[..., 1] = obs[..., 1] / dataset.alpha['x']
+        obs[..., 2] = obs[..., 2] / dataset.alpha['y']
+        obs[..., 3] = obs[..., 3] / dataset.alpha['x']
+        obs[..., 4] = obs[..., 4] / dataset.alpha['y']
+        obs[..., 5] = obs[..., 5] / dataset.alpha['x']
+        obs[..., 6] = obs[..., 6] / dataset.alpha['y']
+        obs[..., 7] = obs[..., 7] / dataset.alpha['th']
+        obs[..., 8] = obs[..., 8] / dataset.alpha['th']
+        obs[..., 9] = obs[..., 9] / dataset.alpha['th']
+        return obs
+        
+        
 
 
 if __name__ in "__main__":
@@ -447,24 +590,25 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = gym.make("Safe-Air3D-2p-NoWalls-Fixed-v1")
+    env = Air3dNpEnv(fixed_goal=True, walls=False, penalize_jerk=False, use_deepreach=True, version=1)
+    # env = gym.make("Safe-Air3D-2p-NoWalls-Fixed-v1")
     # env = gym.wrappers.TimeLimit(env, 100)
-    # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
+    env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
     # env = gym.make("Safe-Air3d-v0")
     obs = env.reset()
     # print(obs)
     done = False
-    while not done:
+    for _ in range(200):
         if env.use_opt_ctrl():
             print("using opt ctrl")
             action = env.opt_ctrl()
         else:
+            print("not using opt ctrl")
             action = np.array([1.5])
             # action = env.action_space.sample()
         _, _, _, info = env.step(action)
 
         obs, reward, done, info = env.step(action)
-        print(reward)
         if done:
             print(info)
             print("done")

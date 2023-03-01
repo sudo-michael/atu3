@@ -24,6 +24,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
         help="the name of this experiment")
+    parser.add_argument("--group", type=str, default="none",
+        help="the name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -40,7 +42,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3D-NoWalls-v1",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3d-NoWalls-Fixed-v3",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=int(1e6),
         help="total timesteps of the experiments")
@@ -48,11 +50,11 @@ def parse_args():
         help="save every x steps")
     parser.add_argument("--buffer-size", type=int, default=int(1e5),
         help="the replay memory buffer size")
-    parser.add_argument("--gamma", type=float, default=0.95,
+    parser.add_argument("--gamma", type=float, default=0.9,
         help="the discount factor gamma")
     parser.add_argument("--tau", type=float, default=0.005,
         help="target smoothing coefficient (default: 0.005)")
-    parser.add_argument("--batch-size", type=int, default=256,
+    parser.add_argument("--batch-size", type=int, default=512,
         help="the batch size of sample from the reply memory")
     parser.add_argument("--exploration-noise", type=float, default=0.1,
         help="the scale of exploration noise")
@@ -73,10 +75,15 @@ def parse_args():
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
 
-    parser.add_argument("--reward-shape-hj-takeover", type=float, default=9.4069,
+    parser.add_argument("--reward-shape-hj-takeover", type=float, default=0.005,
         help="reward pentalty for hj takeover")
     parser.add_argument("--penalize-jerk", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+
+    parser.add_argument("--load", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="load")
+    parser.add_argument("--model-path", type=str, default="./models/Safe-Air3d-NoWalls-Fixed-v3__sac__3__1669027857/actor_999999.pt",
+        help="path to saved model")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -155,6 +162,7 @@ class Actor(nn.Module):
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    print(run_name)
     if args.track:
         import wandb
 
@@ -162,6 +170,7 @@ if __name__ == "__main__":
             project=args.wandb_project_name,
             entity=args.wandb_entity,
             sync_tensorboard=True,
+            group=args.group,
             config=vars(args),
             name=run_name,
             monitor_gym=True,
@@ -172,6 +181,15 @@ if __name__ == "__main__":
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
+
+    def save_policy(actor, step):
+        dir = f"./models/{run_name}"
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+
+        torch.save(actor.state_dict(), f"./models/{run_name}/actor_{step}.pt")
+
+
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -196,6 +214,24 @@ if __name__ == "__main__":
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
+
+    if args.load:
+        actor.load_state_dict(torch.load(args.model_path))
+        obs, info = env.reset(return_info=True)
+        obs = np.expand_dims(obs, axis=0) # (1, 3)
+
+        while True:
+            env.render()
+            if env.use_opt_ctrl():
+                actions = np.expand_dims(env.opt_ctrl(), 0)
+                # print(f'using hj: {actions}')
+                used_hj = True
+            else:
+                actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
+                actions = actions.detach().cpu().numpy() # (1, 1)
+
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, rewards, dones, info = env.step(actions[0]) # actions[0] since there's only 1 env
 
     # Automatic entropy tuning
     if args.autotune:
@@ -227,6 +263,8 @@ if __name__ == "__main__":
     success_rate = deque(maxlen=20)
     # env.unwrapped.evader_state = np.array([-3.31275266, -3.58783757,  2.64757049])
     for global_step in range(args.total_timesteps):
+        if global_step % 100_000 == 0:
+            save_policy(actor, global_step)
         # ALGO LOGIC: put action logic here
         used_hj = False
         # print(f"{info['brt_value']=} {env.unwrapped.evader_state=}")
@@ -257,7 +295,9 @@ if __name__ == "__main__":
             writer.add_scalar("charts/total_hj", total_use_hj, global_step)
             writer.add_scalar("charts/total_unsafe", total_unsafe, global_step)
 
-            if 'collision' in info['terminal_info'].keys():
+            if info['terminal_info'].get('TimeLimit.truncated', False):
+                success_rate.append(0)
+            elif 'collision' in info['terminal_info'].keys():
                 if info['terminal_info']['collision'] == 'wall':
                     total_collide_wall += 1
                     success_rate.append(0)
@@ -267,6 +307,10 @@ if __name__ == "__main__":
                 elif info['terminal_info']['collision'] == 'goal':
                     total_reach_goal += 1
                     success_rate.append(1)
+                elif info['terminal_info']['collision'] == 'none':
+                    success_rate.append(0)
+                elif info['terminal_info']['collision'] == 'timeout':
+                    success_rate.append(0)
                 else:
                     success_rate.append(0)
 
@@ -351,6 +395,7 @@ if __name__ == "__main__":
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
+    save_policy(actor, global_step)
     writer.add_scalar("charts/total_collide_wall", total_collide_wall, global_step)
     writer.add_scalar("charts/total_collide_persuer", total_collide_persuer, global_step)
     writer.add_scalar("charts/total_reach_goal", total_reach_goal, global_step)

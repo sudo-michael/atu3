@@ -1,0 +1,170 @@
+{
+    "lr": {
+        "desc": null,
+        "value": 0.00002
+    },
+    "mode": {
+        "desc": null,
+        "value": "mlp"
+    },
+    "tMax": {
+        "desc": null,
+        "value": 3
+    },
+    "tMin": {
+        "desc": null,
+        "value": 0
+    },
+    "model": {
+        "desc": null,
+        "value": "sine"
+    },
+    "_wandb": {
+        "desc": null,
+        "value": {
+            "t": {
+                "1": [
+                    1,
+                    41,
+                    55
+                ],
+                "2": [
+                    1,
+                    41,
+                    55
+                ],
+                "3": [
+                    2,
+                    13,
+                    16,
+                    23,
+                    35
+                ],
+                "4": "3.8.13",
+                "5": "0.13.5",
+                "8": [
+                    5
+                ]
+            },
+            "code_path": "code/experiment_scripts/train_hji_1E2P.py",
+            "framework": "torch",
+            "start_time": 1669148984.052931,
+            "cli_version": "0.13.5",
+            "is_jupyter_run": false,
+            "python_version": "3.8.13",
+            "is_kaggle_kernel": false
+        }
+    },
+    "num_hl": {
+        "desc": null,
+        "value": 3
+    },
+    "num_nl": {
+        "desc": null,
+        "value": 512
+    },
+    "minWith": {
+        "desc": null,
+        "value": "target"
+    },
+    "pretrain": {
+        "desc": null,
+        "value": true
+    },
+    "clip_grad": {
+        "desc": null,
+        "value": 0
+    },
+    "diffModel": {
+        "desc": null,
+        "value": false
+    },
+    "omegaMaxe": {
+        "desc": null,
+        "value": 2
+    },
+    "omegaMaxp": {
+        "desc": null,
+        "value": 2.84
+    },
+    "use_lbfgs": {
+        "desc": null,
+        "value": false
+    },
+    "velocitye": {
+        "desc": null,
+        "value": 0.22
+    },
+    "velocityp": {
+        "desc": null,
+        "value": 0.1
+    },
+    "batch_size": {
+        "desc": null,
+        "value": 32
+    },
+    "collisionR": {
+        "desc": null,
+        "value": 0.2
+    },
+    "num_epochs": {
+        "desc": null,
+        "value": 130000
+    },
+    "counter_end": {
+        "desc": null,
+        "value": 100000
+    },
+    "logging_root": {
+        "desc": null,
+        "value": "./logs"
+    },
+    "counter_start": {
+        "desc": null,
+        "value": 0
+    },
+    "pretrain_iters": {
+        "desc": null,
+        "value": 30000
+    },
+    "checkpoint_path": {
+        "desc": null,
+        "value": null
+    },
+    "config_filepath": {
+        "desc": null,
+        "value": null
+    },
+    "epochs_til_ckpt": {
+        "desc": null,
+        "value": 1000
+    },
+    "experiment_name": {
+        "desc": null,
+        "value": "BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v3"
+    },
+    "num_src_samples": {
+        "desc": null,
+        "value": 10000
+    },
+    "checkpoint_toload": {
+        "desc": null,
+        "value": 0
+    },
+    "steps_til_summary": {
+        "desc": null,
+        "value": 100
+    },
+    "lambdaBoundaryLoss": {
+        "desc": null,
+        "value": 1
+    },
+    "periodic_transform": {
+        "desc": null,
+        "value": true
+    },
+    "adjust_relative_grads": {
+        "desc": null,
+        "value": true
+    }
+}

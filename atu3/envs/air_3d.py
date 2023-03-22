@@ -149,8 +149,8 @@ class Air3dEnv(gym.Env):
 
         
         # TODO: remove 
-        self.evader_state = np.array([0, 1, 0])
-        self.persuer_state = np.array([-1, 0, 0])
+        # self.evader_state = np.array([0, 1, 0])
+        # self.persuer_state = np.array([-1, 0, 0])
 
         self.last_dist_to_goal = np.linalg.norm(
             self.evader_state[:2] - self.goal_location[:2]
@@ -176,18 +176,18 @@ class Air3dEnv(gym.Env):
                 break
 
     def in_bounds(self, evader_state):
-        if not (
-            self.left_wall + self.car.r
-            <= evader_state[0]
-            <= self.right_wall - self.car.r
-        ):
-            return False
-        elif not (
-            self.bottom_wall + self.car.r
-            <= evader_state[1]
-            <= self.top_wall - self.car.r
-        ):
-            return False
+        # if not (
+        #     self.left_wall + self.car.r
+        #     <= evader_state[0]
+        #     <= self.right_wall - self.car.r
+        # ):
+        #     return False
+        # elif not (
+        #     self.bottom_wall + self.car.r
+        #     <= evader_state[1]
+        #     <= self.top_wall - self.car.r
+        # ):
+        #     return False
         return True
 
     def near_goal(self, evader_state, goal_state, tol):

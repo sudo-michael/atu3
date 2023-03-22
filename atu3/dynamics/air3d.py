@@ -130,6 +130,7 @@ class Air3D:
         v = self.ve if is_evader else self.vp
         x_dot = v * np.cos(state[2])
         y_dot = v * np.sin(state[2])
+        ctrl = ctrl.reshape(1, )
         theta_dot = ctrl[0]
         return np.array([x_dot, y_dot, theta_dot], dtype=np.float32)
 

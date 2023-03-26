@@ -67,12 +67,12 @@ class Air3DNpEnv(gym.Env):
         self.evader_state[2] = normalize_angle(self.evader_state[2])
         for i in range(self.n):
             persuer_action = self.opt_dstb(self.persuer_states[i])
-            self.persuer_states[i] = (
-                self.car.dynamics_non_hcl(0, self.persuer_states[i], persuer_action)
-                * self.dt
-                + self.persuer_states[i]
-            )
-            self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
+            # self.persuer_states[i] = (
+            #     self.car.dynamics_non_hcl(0, self.persuer_states[i], persuer_action)
+            #     * self.dt
+            #     + self.persuer_states[i]
+            # )
+            # self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = -dist_to_goal
@@ -109,9 +109,10 @@ class Air3DNpEnv(gym.Env):
         self.evader_state = np.array([0.0, 0.0, 0.0])
 
         for i in range(self.n):
-            self.persuer_states[i] = np.random.uniform(
-                low=-self.world_boundary, high=self.world_boundary
-            )
+            # self.persuer_states[i] = np.random.uniform(
+            #     low=-self.world_boundary, high=self.world_boundary
+            # )
+            self.persuer_states[i] = np.array([1.0, 0.1, -np.pi])
 
         goal_locations = [
             np.array([1.5, 1.5]),
@@ -188,9 +189,11 @@ class Air3DNpEnv(gym.Env):
         return
 
     def use_opt_ctrl(self, threshold=0.2):
-        return self.grid.get_value(self.brt, self.evader_state) < threshold
+        relative_state = self.relative_state(self.persuer_states[0])
+        return self.grid.get_value(self.brt, relative_state) < threshold
 
     def opt_ctrl(self):
+        # TODO not working if the evader is not facing the persuer
         # assert -np.pi <= self.evader_state[2] <= np.pi
         if self.n > 1:
             raise NotImplementedError("Only support 1 persuer for now")
@@ -198,6 +201,7 @@ class Air3DNpEnv(gym.Env):
         index = self.grid.get_index(relative_state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
         opt_ctrl = self.car.opt_ctrl_non_hcl(self.evader_state, spat_deriv)
+        print(f"{opt_ctrl=}")
         return opt_ctrl
 
     def opt_dstb(self, persuer_state):
@@ -254,17 +258,23 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = Air3DNp(1, use_hj=True)
+    env = Air3DNpEnv(1, use_hj=True)
     env = gym.wrappers.TimeLimit(env, max_episode_steps=500)
     obs = env.reset()
     print(obs.shape)
     done = False
+    t = 0
     while not done:
         action = env.action_space.sample()
+        if t % 2 == 0:
+            action = np.array([env.unwrapped.car.we_max])
+        else:
+            action = np.array([-env.unwrapped.car.we_max])
         _, _, _, info = env.step(action)
+        t += 1
 
         obs, reward, done, info = env.step(action)
-        print(reward)
+        print(f"{reward=}")
         if done:
             print(info)
             print("done")

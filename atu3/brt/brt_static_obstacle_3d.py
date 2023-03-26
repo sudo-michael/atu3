@@ -48,7 +48,9 @@ if __name__ in "__main__":
 
     # brt(d=False)
     def brat(d=True):
-        lookback_length = 1.0
+        # I think there's something wrong with the brat solver
+        # when lookback_length is too long
+        lookback_length = 15.0
         t_step = 0.05
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
@@ -67,5 +69,27 @@ if __name__ in "__main__":
             saveAllTimeSteps=False,
         )
 
-        # np.save("./atu3/envs/assets/brts/static_obstacle_brat.npy", result)
-    brat(d=False)
+        np.save("./atu3/envs/assets/brts/static_obstacle_brat.npy", result)
+    # brat(d=False)
+
+    def min_brt(d=True):
+        lookback_length = 15.0
+        t_step = 0.05
+        small_number = 1e-5
+        tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
+
+        compMethods = {"TargetSetMode": "minVWithV0"} 
+
+        result = HJSolver(
+            car_brat,
+            g,
+            goal, 
+            tau,
+            compMethods,
+            PlotOptions(
+                do_plot=True, plot_type="3d_plot", plotDims=[0, 1, 2], slicesCut=[]
+            ),
+            saveAllTimeSteps=False,
+        )
+        np.save("./atu3/envs/assets/brts/static_obstacle_min_brt.npy", result)
+    min_brt()

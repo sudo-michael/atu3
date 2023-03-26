@@ -11,12 +11,11 @@ grid = Grid(
     # np.array([40, 40, 24, 40, 40, 24]) // 10,
     np.array([2, 5]),
 )
+
 car_r = 0.1
-# first 3 dim is for persuer, last 3 is for evader
+
 car_brt = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.84, ve=0.22, vp=0.12)
 car_brt_2 = Air6D(r=car_r, u_mode="max", d_mode="min", we_max=1.5, wp_max=1.0, ve=1.0, vp=0.5)
-
-VERSION=1
 
 cylinder_r = car_r + car_r
 
@@ -46,18 +45,42 @@ if __name__ in "__main__":
     ivf = collide(X1, X2, X4, X5)
 
 
-    def brt(version):
+    # def brt(version):
+    #     lookback_length = 3.0
+    #     t_step = 0.06
+    #     small_number = 1e-5
+    #     tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
+
+    #     compMethods = {"TargetSetMode": "minVWithV0"}
+
+    #     if version == 1:
+    #         car = car_brt
+    #     elif version == 2:
+    #         car = car_brt_2
+
+    #     result = HJSolver(
+    #         car,
+    #         grid,
+    #         ivf, 
+    #         tau,
+    #         compMethods,
+    #         PlotOptions(
+    #             do_plot=False, plot_type="3d_plot", plotDims=[0, 1, 2], slicesCut=[]
+    #         ),
+    #         saveAllTimeSteps=False,
+    #     )
+
+    #     np.save(f"./atu3/envs/assets/brts/air6d_brt_no_wall_5_40_v{version}.npy", result)
+
+    # brt(VERSION)
+
+    def brt():
         lookback_length = 3.0
         t_step = 0.06
         small_number = 1e-5
         tau = np.arange(start=0, stop=lookback_length + small_number, step=t_step)
 
         compMethods = {"TargetSetMode": "minVWithV0"}
-
-        if version == 1:
-            car = car_brt
-        elif version == 2:
-            car = car_brt_2
 
         result = HJSolver(
             car,
@@ -72,5 +95,3 @@ if __name__ in "__main__":
         )
 
         np.save(f"./atu3/envs/assets/brts/air6d_brt_no_wall_5_40_v{version}.npy", result)
-
-    brt(VERSION)

@@ -37,7 +37,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-StaticAir9d-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-Air3D-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=1_000_000,
         help="total timesteps of the experiments")
@@ -68,21 +68,27 @@ def parse_args():
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
 
+    # hj 
     parser.add_argument("--use-hj", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
         help="use hj")
+    
+    # other 
+    parser.add_argument("--normalize-obs", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="normalize obs")
     args = parser.parse_args()
     # fmt: on
     return args
 
 
-def make_env(env_id, use_hj, seed, idx, capture_video, run_name):
+def make_env(env_id, use_hj, normalize_obs, seed, idx, capture_video, run_name):
     def thunk():
         env = gym.make(env_id, use_hj=use_hj)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        env = gym.wrappers.NormalizeObservation(env)
+        if normalize_obs:
+            env = gym.wrappers.NormalizeObservation(env)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -181,7 +187,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.use_hj, args.seed, 0, args.capture_video, run_name)])
+    envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.use_hj, args.normalize_obs, args.seed, 0, args.capture_video, run_name)])
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     max_action = float(envs.single_action_space.high[0])
@@ -219,6 +225,7 @@ if __name__ == "__main__":
     obs = envs.reset()
     
     goal_counter = 0
+    collison_counter = 0
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -238,6 +245,8 @@ if __name__ == "__main__":
                 writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 if info.get('collision', 'none') == 'goal':
                     goal_counter += 1
+                if info.get('collision', 'none') == 'persuer':
+                    collison_counter += 1
                 break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `terminal_observation`
@@ -311,6 +320,7 @@ if __name__ == "__main__":
                 writer.add_scalar("losses/alpha", alpha, global_step)
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
                 writer.add_scalar("objective/goal_counter", goal_counter, global_step)
+                writer.add_scalar("objective/collision_counter", collison_counter, global_step)
                 if args.autotune:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 

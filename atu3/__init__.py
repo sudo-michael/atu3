@@ -28,6 +28,13 @@ register(
     max_episode_steps=450,
 )
 
+register(
+    id="Safe-Air3D-v0",
+    entry_point="atu3.envs:Air3DNpEnv",
+    kwargs={"n": 1},
+    max_episode_steps=450,
+)
+
 # register(
 #     id="Safe-GoalAir3d-NoWalls-v0",
 #     entry_point="atu3.envs:GoalAir3dEnv",

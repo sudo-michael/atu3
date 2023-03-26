@@ -9,7 +9,7 @@ from atu3.brt.brt_static_obstacle_3d import goal_r
 import itertools
 
 
-class Air3DNp(gym.Env):
+class Air3DNpEnv(gym.Env):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render.modes": ["human", "rgb_array"],

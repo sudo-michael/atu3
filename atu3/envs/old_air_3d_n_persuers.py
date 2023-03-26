@@ -8,35 +8,6 @@ import torch
 
 import sys
 
-sys.path.append(
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../../../siren-reach")
-)
-
-# load confing into dataclasas like structure thing
-import json
-with open("./atu3/envs/assets/config/brt_1e2p.json", 'r') as f:
-    opt = f.read() 
-opt = json.loads(opt)
-for k, v in opt.items():
-    if k[0] != '_':
-        opt[k] = v['value']
-opt.pop('_wandb')
-from collections import namedtuple
-opt = namedtuple('opt', opt.keys())(*opt.values())
-
-
-import modules, dataio, diff_operators
-dataset = dataio.Reachability1E2PSource(numpoints=65000, tMin=opt.tMin, tMax=opt.tMax,
-                                        counter_start=opt.counter_start, counter_end=opt.counter_end,
-                                        collisionR=opt.collisionR, velocitye=opt.velocitye, velocityp=opt.velocityp, omegaMaxe=opt.omegaMaxe,omegaMaxp=opt.omegaMaxp, diffModel=opt.diffModel,
-                                        pretrain=opt.pretrain, pretrain_iters=opt.pretrain_iters, num_src_samples=opt.num_src_samples)
-model = modules.SingleBVPNet(in_features=13, out_features=1, type=opt.model, mode=opt.mode,
-                            final_layer_factor=1., hidden_features=opt.num_nl, num_hidden_layers=opt.num_hl, 
-                            input_transform_function=dataset.input_transform_function)
-model.cuda()
-# torch.load("../../siren-reach/logs/BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v2/checkpoints/model_final.pth")
-# model.load_state_dict(torch.load("../../siren-reach/logs/BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v3/checkpoints/model_final.pth"))
-model.load_state_dict(torch.load("../../siren-reach/logs/BRTPeriodicityIssue/1E2P/CollisionR_0x2/normalModel_v_with_periodic_transform_t3_v2/checkpoints/model_final.pth"))
 
 class Air3dNpEnv(gym.Env):
     metadata = {
@@ -45,7 +16,15 @@ class Air3dNpEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, fixed_goal, walls, penalize_jerk=False, version=1, n_persuers=2, use_deepreach=False) -> None:
+    def __init__(
+        self,
+        fixed_goal,
+        walls,
+        penalize_jerk=False,
+        version=1,
+        n_persuers=2,
+        use_deepreach=False,
+    ) -> None:
         self.return_info = True
         self.fixed_goal = fixed_goal
         self.walls = walls
@@ -132,11 +111,11 @@ class Air3dNpEnv(gym.Env):
         self.evader_state[2] = normalize_angle(self.evader_state[2])
         # DBG
         obs = self.get_deepreach_obs()
-        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_input = {"coords": torch.Tensor(obs).cuda()}
         model_output = model(model_input)
 
-        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
-        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        x = model_output["model_in"]  # (meta_batch_size, num_points, 3)
+        y = model_output["model_out"]  # (meta_batch_size, num_points, 1)
         # print(f'value: {y.item()}')
         du, status = diff_operators.jacobian(y, x)
         dudt = du[..., 0, 0]
@@ -160,14 +139,16 @@ class Air3dNpEnv(gym.Env):
         self.last_dist_to_goal = dist_to_goal
 
         if self.penalize_jerk:
-            reward -= (1/120) * np.abs((action[0] - self.last_theta_dot)) / 0.05 # divide by 60 to make reward not too big
+            reward -= (
+                (1 / 120) * np.abs((action[0] - self.last_theta_dot)) / 0.05
+            )  # divide by 60 to make reward not too big
             self.last_theta_dot = action[0]
         done = False
         info = {}
         info["brt_value"] = self.grid.get_value(self.brt, self.evader_state)
         info["cost"] = 0
         info["safe"] = True
-        info['collision'] = 'none'
+        info["collision"] = "none"
 
         if not self.in_bounds(self.evader_state):
             done = True
@@ -304,31 +285,49 @@ class Air3dNpEnv(gym.Env):
     def get_deepreach_obs(self, persuer_1_first=True):
         alpha = dataset.alpha
         if persuer_1_first:
-            x_normalized = np.array([[
-                3.0,
-                self.evader_state[0], self.evader_state[1],
-                self.persuer_state[0][0], self.persuer_state[0][1],
-                self.persuer_state[1][0], self.persuer_state[1][1], 
-                self.evader_state[2], self.persuer_state[0][2], self.persuer_state[1][2]
-            ]])
+            x_normalized = np.array(
+                [
+                    [
+                        3.0,
+                        self.evader_state[0],
+                        self.evader_state[1],
+                        self.persuer_state[0][0],
+                        self.persuer_state[0][1],
+                        self.persuer_state[1][0],
+                        self.persuer_state[1][1],
+                        self.evader_state[2],
+                        self.persuer_state[0][2],
+                        self.persuer_state[1][2],
+                    ]
+                ]
+            )
         else:
-            x_normalized = np.array([[
-                3.0,
-                self.evader_state[0], self.evader_state[1],
-                self.persuer_state[1][0], self.persuer_state[1][1],
-                self.persuer_state[0][0], self.persuer_state[0][1], 
-                self.evader_state[2], self.persuer_state[1][2], self.persuer_state[0][2]
-            ]])
+            x_normalized = np.array(
+                [
+                    [
+                        3.0,
+                        self.evader_state[0],
+                        self.evader_state[1],
+                        self.persuer_state[1][0],
+                        self.persuer_state[1][1],
+                        self.persuer_state[0][0],
+                        self.persuer_state[0][1],
+                        self.evader_state[2],
+                        self.persuer_state[1][2],
+                        self.persuer_state[0][2],
+                    ]
+                ]
+            )
 
-        x_normalized[..., 1] = x_normalized[..., 1] / alpha['x']
-        x_normalized[..., 2] = x_normalized[..., 2] / alpha['y']
-        x_normalized[..., 3] = x_normalized[..., 3] / alpha['x']
-        x_normalized[..., 4] = x_normalized[..., 4] / alpha['y']
-        x_normalized[..., 5] = x_normalized[..., 5] / alpha['x']
-        x_normalized[..., 6] = x_normalized[..., 6] / alpha['y']
-        x_normalized[..., 7] = x_normalized[..., 7] / alpha['th']
-        x_normalized[..., 8] = x_normalized[..., 8] / alpha['th']
-        x_normalized[..., 9] = x_normalized[..., 9] / alpha['th']
+        x_normalized[..., 1] = x_normalized[..., 1] / alpha["x"]
+        x_normalized[..., 2] = x_normalized[..., 2] / alpha["y"]
+        x_normalized[..., 3] = x_normalized[..., 3] / alpha["x"]
+        x_normalized[..., 4] = x_normalized[..., 4] / alpha["y"]
+        x_normalized[..., 5] = x_normalized[..., 5] / alpha["x"]
+        x_normalized[..., 6] = x_normalized[..., 6] / alpha["y"]
+        x_normalized[..., 7] = x_normalized[..., 7] / alpha["th"]
+        x_normalized[..., 8] = x_normalized[..., 8] / alpha["th"]
+        x_normalized[..., 9] = x_normalized[..., 9] / alpha["th"]
 
         return x_normalized
 
@@ -350,7 +349,9 @@ class Air3dNpEnv(gym.Env):
     def near_goal(self, evader_state, goal_state, tol=None):
         # r of goal == self.car.r
         if tol == None:
-            return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (self.goal_r + self.car.r)
+            return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= (
+                self.goal_r + self.car.r
+            )
         else:
             return np.linalg.norm(evader_state[:2] - goal_state[:2]) <= tol
 
@@ -409,7 +410,7 @@ class Air3dNpEnv(gym.Env):
         # te = torch.ones(X.shape[0]**2, 1) * obs[7]/ dataset.alpha['th']
         # tp = torch.ones(X.shape[0]**2, 1) * obs[8]/ dataset.alpha['th']
         # tp2 = torch.ones(X.shape[0]**2, 1) * obs[9]/ dataset.alpha['th']
-        # # coords = torch.cat((time_coords, mgrid_coords, one_coords / 3.0, zero_coords, -one_coords / 3.0, zero_coords, zero_coords, theta_coords, theta_coords), dim=1) 
+        # # coords = torch.cat((time_coords, mgrid_coords, one_coords / 3.0, zero_coords, -one_coords / 3.0, zero_coords, zero_coords, theta_coords, theta_coords), dim=1)
         # mgrid_coords = dataio.get_mgrid(sidelen)
         # model_input = {'coords': torch.FloatTensor(coords).cuda()}
         # model_output = model(model_input)
@@ -510,49 +511,62 @@ class Air3dNpEnv(gym.Env):
 
     def theta_to_cos_sin(self, state, b=False):
         if b:
-            return np.concatenate((state[..., 0], state[..., 1], np.cos(state[..., 2]), np.sin(state[..., 2])))
+            return np.concatenate(
+                (
+                    state[..., 0],
+                    state[..., 1],
+                    np.cos(state[..., 2]),
+                    np.sin(state[..., 2]),
+                )
+            )
         return np.array(
             [state[0], state[1], np.cos(state[2]), np.sin(state[2])], dtype=np.float32
         )
-    
+
     def get_opt_dstb(self):
         obs = self.get_deepreach_obs()
-        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_input = {"coords": torch.Tensor(obs).cuda()}
         model_output = model(model_input)
 
-        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
-        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        x = model_output["model_in"]  # (meta_batch_size, num_points, 3)
+        y = model_output["model_out"]  # (meta_batch_size, num_points, 1)
         du, status = diff_operators.jacobian(y, x)
         dudt = du[..., 0, 0]
         dudx = du[..., 0, 1:]
-        _, p1_dstb, _ = dataset.compute_overall_ham(x[..., 1:], dudx, return_opt_ctrl=True)
+        _, p1_dstb, _ = dataset.compute_overall_ham(
+            x[..., 1:], dudx, return_opt_ctrl=True
+        )
         p1_dstb = p1_dstb.item()
 
         obs = self.get_deepreach_obs(persuer_1_first=False)
-        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_input = {"coords": torch.Tensor(obs).cuda()}
         model_output = model(model_input)
 
-        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
-        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        x = model_output["model_in"]  # (meta_batch_size, num_points, 3)
+        y = model_output["model_out"]  # (meta_batch_size, num_points, 1)
         du, status = diff_operators.jacobian(y, x)
         dudt = du[..., 0, 0]
         dudx = du[..., 0, 1:]
-        _, p2_dstb, _ = dataset.compute_overall_ham(x[..., 1:], dudx, return_opt_ctrl=True)
+        _, p2_dstb, _ = dataset.compute_overall_ham(
+            x[..., 1:], dudx, return_opt_ctrl=True
+        )
         p2_dstb = p2_dstb.item()
         return np.array([p1_dstb]), np.array([p2_dstb])
-    
+
     def get_opt_ctrl(self):
         obs = self.get_deepreach_obs()
-        model_input = {'coords': torch.Tensor(obs).cuda()}
+        model_input = {"coords": torch.Tensor(obs).cuda()}
         model_output = model(model_input)
 
-        # opt_disb        
-        x = model_output['model_in']  # (meta_batch_size, num_points, 3)
-        y = model_output['model_out']  # (meta_batch_size, num_points, 1)
+        # opt_disb
+        x = model_output["model_in"]  # (meta_batch_size, num_points, 3)
+        y = model_output["model_out"]  # (meta_batch_size, num_points, 1)
         du, status = diff_operators.jacobian(y, x)
         dudt = du[..., 0, 0]
         dudx = du[..., 0, 1:]
-        opt_ctrl, _, _ = dataset.compute_vehicle_ham(x[..., 1:], dudx, return_opt_ctrl=True)
+        opt_ctrl, _, _ = dataset.compute_vehicle_ham(
+            x[..., 1:], dudx, return_opt_ctrl=True
+        )
         return np.array([opt_ctrl.item()])
 
     def get_value(self):
@@ -560,26 +574,24 @@ class Air3dNpEnv(gym.Env):
         # normalize obs
         norm_obs = self.normalize_deepreach_obs(obs)
         with torch.no_grad():
-            model_input = {'coords': torch.Tensor(norm_obs).cuda()}
+            model_input = {"coords": torch.Tensor(norm_obs).cuda()}
             model_out = model(model_input)
-        model_out = model_out['model_out']
-        model_out = (model_out*dataset.var/dataset.norm_to) + dataset.mean 
+        model_out = model_out["model_out"]
+        model_out = (model_out * dataset.var / dataset.norm_to) + dataset.mean
         value = model_out.item()
         return value
 
     def normalize_deepreach_obs(self, obs):
-        obs[..., 1] = obs[..., 1] / dataset.alpha['x']
-        obs[..., 2] = obs[..., 2] / dataset.alpha['y']
-        obs[..., 3] = obs[..., 3] / dataset.alpha['x']
-        obs[..., 4] = obs[..., 4] / dataset.alpha['y']
-        obs[..., 5] = obs[..., 5] / dataset.alpha['x']
-        obs[..., 6] = obs[..., 6] / dataset.alpha['y']
-        obs[..., 7] = obs[..., 7] / dataset.alpha['th']
-        obs[..., 8] = obs[..., 8] / dataset.alpha['th']
-        obs[..., 9] = obs[..., 9] / dataset.alpha['th']
+        obs[..., 1] = obs[..., 1] / dataset.alpha["x"]
+        obs[..., 2] = obs[..., 2] / dataset.alpha["y"]
+        obs[..., 3] = obs[..., 3] / dataset.alpha["x"]
+        obs[..., 4] = obs[..., 4] / dataset.alpha["y"]
+        obs[..., 5] = obs[..., 5] / dataset.alpha["x"]
+        obs[..., 6] = obs[..., 6] / dataset.alpha["y"]
+        obs[..., 7] = obs[..., 7] / dataset.alpha["th"]
+        obs[..., 8] = obs[..., 8] / dataset.alpha["th"]
+        obs[..., 9] = obs[..., 9] / dataset.alpha["th"]
         return obs
-        
-        
 
 
 if __name__ in "__main__":
@@ -590,10 +602,14 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = Air3dNpEnv(fixed_goal=True, walls=False, penalize_jerk=False, use_deepreach=True, version=1)
+    env = Air3dNpEnv(
+        fixed_goal=True, walls=False, penalize_jerk=False, use_deepreach=True, version=1
+    )
     # env = gym.make("Safe-Air3D-2p-NoWalls-Fixed-v1")
     # env = gym.wrappers.TimeLimit(env, 100)
-    env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
+    env = gym.wrappers.RecordVideo(
+        env, f"debug_videos/{run_name}", episode_trigger=lambda x: True
+    )
     # env = gym.make("Safe-Air3d-v0")
     obs = env.reset()
     # print(obs)

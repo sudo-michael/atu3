@@ -18,6 +18,8 @@ class Air3DNpEnv(gym.Env):
 
     def __init__(self, n, use_hj=False) -> None:
         self.car = car_brt
+        # NOTE: let's try making the persuer slower since optimal disturbance makes it hard for the evader to escape
+        self.car.vp = 0.1
         self.dt = 0.05
         self.use_hj = use_hj
         self.n = n
@@ -67,12 +69,12 @@ class Air3DNpEnv(gym.Env):
         self.evader_state[2] = normalize_angle(self.evader_state[2])
         for i in range(self.n):
             persuer_action = self.opt_dstb(self.persuer_states[i])
-            # self.persuer_states[i] = (
-            #     self.car.dynamics_non_hcl(0, self.persuer_states[i], persuer_action)
-            #     * self.dt
-            #     + self.persuer_states[i]
-            # )
-            # self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
+            self.persuer_states[i] = (
+                self.car.dynamics_non_hcl(0, self.persuer_states[i], persuer_action)
+                * self.dt
+                + self.persuer_states[i]
+            )
+            self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = -dist_to_goal
@@ -107,12 +109,17 @@ class Air3DNpEnv(gym.Env):
 
     def reset(self, seed=None):
         self.evader_state = np.array([0.0, 0.0, 0.0])
-
+        # DEBUG: the following cases show when the brt is not working
+        # works
+        # self.evader_state = np.array([0.0, 0.0, 0.0])
+        # self.persuer_states[0] = np.array([1.0, 0.3, -np.pi])
+        # doesn't
+        # self.evader_state = np.array([0.0, 0.0, np.pi])
+        # self.persuer_states[0] = np.array([-1.0, -0.3, 0.0])
         for i in range(self.n):
-            # self.persuer_states[i] = np.random.uniform(
-            #     low=-self.world_boundary, high=self.world_boundary
-            # )
-            self.persuer_states[i] = np.array([1.0, 0.1, -np.pi])
+            self.persuer_states[i] = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
 
         goal_locations = [
             np.array([1.5, 1.5]),
@@ -159,11 +166,14 @@ class Air3DNpEnv(gym.Env):
         Xr = X * np.cos(angle) - Y * np.sin(angle)
         Yr = X * np.sin(angle) + Y * np.cos(angle)
 
-        index = self.grid.get_index(self.evader_state)
+        # DEBUG: visualize relative state
+        # add_robot(relative_state, color="orange")
+        # add_robot(np.zeros(3), color="yellow")
 
         self.ax.contour(
             Xr + self.evader_state[0],
             Yr + self.evader_state[1],
+            # X, Y,
             self.brt[:, :, index[2]],
             levels=[0.1],
         )
@@ -200,7 +210,9 @@ class Air3DNpEnv(gym.Env):
         relative_state = self.relative_state(self.persuer_states[0])
         index = self.grid.get_index(relative_state)
         spat_deriv = spa_deriv(index, self.brt, self.grid)
-        opt_ctrl = self.car.opt_ctrl_non_hcl(self.evader_state, spat_deriv)
+        # should this be relative_state or self.evader_state?
+        # opt_ctrl = self.car.opt_ctrl_non_hcl(self.evader_state, spat_deriv)
+        opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
         print(f"{opt_ctrl=}")
         return opt_ctrl
 
@@ -233,6 +245,7 @@ class Air3DNpEnv(gym.Env):
 
         # after rotating by -evader_state[2], the relative angle will still be the same
         rotated_relative_state[2] = normalize_angle(relative_state[2])
+        # print(rotated_relative_state)
         return rotated_relative_state
 
     def get_obs(self, evader_state, persuer_states, goal):
@@ -274,7 +287,7 @@ if __name__ in "__main__":
         t += 1
 
         obs, reward, done, info = env.step(action)
-        print(f"{reward=}")
+        # print(f"{reward=}")
         if done:
             print(info)
             print("done")

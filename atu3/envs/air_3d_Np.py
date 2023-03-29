@@ -213,7 +213,6 @@ class Air3DNpEnv(gym.Env):
         # should this be relative_state or self.evader_state?
         # opt_ctrl = self.car.opt_ctrl_non_hcl(self.evader_state, spat_deriv)
         opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
-        print(f"{opt_ctrl=}")
         return opt_ctrl
 
     def opt_dstb(self, persuer_state):

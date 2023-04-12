@@ -6,7 +6,9 @@ from atu3.utils import normalize_angle, spa_deriv
 from atu3.brt.brt_static_obstacle_3d import g as grid
 from atu3.brt.brt_air_3d import car_brt
 from atu3.brt.brt_static_obstacle_3d import goal_r
+from atu3.deepreach.hji_1E2P import load_deepreach
 import itertools
+import jax.numpy as jnp
 
 
 class Air3DNpEnv(gym.Env):
@@ -16,12 +18,15 @@ class Air3DNpEnv(gym.Env):
         "render_fps": 30,
     }
 
-    def __init__(self, n, use_hj=False) -> None:
+    def __init__(self, n, use_hj=False, deepreach_backend=False) -> None:
         self.car = car_brt
         # NOTE: let's try making the persuer slower since optimal disturbance makes it hard for the evader to escape
-        self.car.vp = 0.1
+        self.car.vp = 0.11
         self.dt = 0.05
         self.use_hj = use_hj
+        self.deepreach_backend = deepreach_backend
+        if self.deepreach_backend:
+            assert n == 2
         self.n = n
 
         self.action_space = gym.spaces.Box(
@@ -48,11 +53,17 @@ class Air3DNpEnv(gym.Env):
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
         path = os.path.abspath(__file__)
-        dir_path = os.path.dirname(path)
-        self.brt = np.load(os.path.join(dir_path, f"assets/brts/air3d_brt_0.npy"))
-        self.backup_brt = np.load(os.path.join(dir_path, f"assets/brts/backup_air3d_brt_0.npy"))
-
-        self.grid = grid
+        if self.deepreach_backend:
+            self.opt_ctrl_dstb_fn, self.value_fn, self.dataset_state = load_deepreach(
+                "1e2p_atu3_4"
+            )
+        else:
+            dir_path = os.path.dirname(path)
+            self.brt = np.load(os.path.join(dir_path, f"assets/brts/air3d_brt_0.npy"))
+            self.backup_brt = np.load(
+                os.path.join(dir_path, f"assets/brts/backup_air3d_brt_0.npy")
+            )
+            self.grid = grid
 
     def step(self, action):
         info = {}
@@ -67,14 +78,29 @@ class Air3DNpEnv(gym.Env):
             + self.evader_state
         )
         self.evader_state[2] = normalize_angle(self.evader_state[2])
-        for i in range(self.n):
-            persuer_action = self.opt_dstb(self.persuer_states[i])
-            self.persuer_states[i] = (
-                self.car.dynamics_non_hcl(0, self.persuer_states[i], persuer_action)
-                * self.dt
-                + self.persuer_states[i]
-            )
-            self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
+
+        if self.deepreach_backend:
+            persuer_actions = self.opt_dstb(self.persuer_states)
+            for i in range(self.n):
+                self.persuer_states[i] = (
+                    self.car.dynamics_non_hcl(
+                        0, self.persuer_states[i], persuer_actions[i], is_evader=False
+                    )
+                    * self.dt
+                    + self.persuer_states[i]
+                )
+                self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
+        else:
+            for i in range(self.n):
+                persuer_action = self.opt_dstb(self.persuer_states[i])
+                self.persuer_states[i] = (
+                    self.car.dynamics_non_hcl(
+                        0, self.persuer_states[i], persuer_action, is_evader=False
+                    )
+                    * self.dt
+                    + self.persuer_states[i]
+                )
+                self.persuer_states[i][2] = normalize_angle(self.persuer_states[i][2])
 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = -dist_to_goal
@@ -116,19 +142,24 @@ class Air3DNpEnv(gym.Env):
         # doesn't
         # self.evader_state = np.array([0.0, 0.0, np.pi])
         # self.persuer_states[0] = np.array([-1.0, -0.3, 0.0])
+        goal_locations = [
+            np.array([2.5, 2.5]),
+            np.array([0, 3.0]),
+            np.array([-2.5, 2.5]),
+            np.array([3.0, 0]),
+            np.array([2.5, -2.5]),
+        ]
+
+        random_idx = np.random.randint(0, len(goal_locations))
+        self.goal_location = goal_locations[random_idx]
+
         for i in range(self.n):
             self.persuer_states[i] = np.random.uniform(
                 low=-self.world_boundary, high=self.world_boundary
             )
 
-        goal_locations = [
-            np.array([1.5, 1.5]),
-            np.array([0, 2.0]),
-            np.array([-1.5, 1.5]),
-            np.array([2.0, 0]),
-            np.array([1.5, -1.5]),
-        ]
-        self.goal_location = goal_locations[np.random.randint(0, 3)]
+            # insert the persuer between the goal and the evader
+            self.persuer_states[i][:2] = goal_locations[random_idx] // 2
 
         info = {}
         info["cost"] = 0
@@ -199,36 +230,55 @@ class Air3DNpEnv(gym.Env):
         return
 
     def use_opt_ctrl(self, threshold=0.2):
-        relative_state = self.relative_state(self.persuer_states[0])
-        return self.grid.get_value(self.brt, relative_state) < threshold
+        if self.deepreach_backend:
+            unnormalized_tcoords = self.deepreach_state(
+                self.evader_state, self.persuer_states
+            )
+            value = self.value_fn(jnp.array(unnormalized_tcoords))
+            return value.item() < threshold
+        else:
+            relative_state = self.relative_state(self.persuer_states[0])
+            return self.grid.get_value(self.brt, relative_state) < threshold
 
     def opt_ctrl(self):
-        # TODO not working if the evader is not facing the persuer
-        # assert -np.pi <= self.evader_state[2] <= np.pi
-        if self.n > 1:
+        if self.deepreach_backend:
+            unnormalized_tcoords = self.deepreach_state(
+                self.evader_state, self.persuer_states
+            )
+            opt_ctrl, _ = self.opt_ctrl_dstb_fn(
+                jnp.array(unnormalized_tcoords)
+            )  # (1, ), _
+            return np.array(opt_ctrl[0])  # (1, )
+        elif self.n > 1:
             raise NotImplementedError("Only support 1 persuer for now")
-        relative_state = self.relative_state(self.persuer_states[0])
-        index = self.grid.get_index(relative_state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid)
-        # should this be relative_state or self.evader_state?
-        # opt_ctrl = self.car.opt_ctrl_non_hcl(self.evader_state, spat_deriv)
-        opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
-        return opt_ctrl
+        else:
+            relative_state = self.relative_state(self.persuer_states[0])
+            index = self.grid.get_index(relative_state)
+            spat_deriv = spa_deriv(index, self.brt, self.grid)
+            opt_ctrl = self.car.opt_ctrl_non_hcl(relative_state, spat_deriv)
+            return opt_ctrl
 
     def opt_dstb(self, persuer_state):
-        if self.n > 1:
+        if self.deepreach_backend:
+            unnormalized_tcoords = self.deepreach_state(
+                self.evader_state, self.persuer_states
+            )
+            _, opt_dstbs = self.opt_ctrl_dstb_fn(jnp.array(unnormalized_tcoords))
+            return np.array(opt_dstbs)
+        elif self.n > 1:
             raise NotImplementedError("Only support 1 persuer for now")
-        relative_state = self.relative_state(persuer_state)
-        index = self.grid.get_index(relative_state)
-        spat_deriv = spa_deriv(index, self.brt, self.grid)
-        if spat_deriv[2] == 0:
-            relative_state = persuer_state - self.evader_state
-            relative_state[2] = persuer_state[2]
+        else:
+            relative_state = self.relative_state(persuer_state)
             index = self.grid.get_index(relative_state)
-            spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
+            spat_deriv = spa_deriv(index, self.brt, self.grid)
+            if spat_deriv[2] == 0:
+                relative_state = persuer_state - self.evader_state
+                relative_state[2] = persuer_state[2]
+                index = self.grid.get_index(relative_state)
+                spat_deriv = spa_deriv(index, self.backup_brt, self.grid)
 
-        opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
-        return opt_dstb
+            opt_dstb = self.car.opt_dstb_non_hcl(spat_deriv)
+            return opt_dstb
 
     def relative_state(self, persuer_state):
         rotated_relative_state = np.zeros(3)
@@ -256,6 +306,34 @@ class Air3DNpEnv(gym.Env):
         )
         return np.concatenate((tuple(itertools.chain.from_iterable(t))))
 
+    def deepreach_state(self, evader_state, persuer_states):
+        def state_to_unnormalized_tcoords(evader_state, persuer_states, t=0.0):
+            # [state sequence: 0, 1,   2,   3     4,    5,    6,    7,       8,        9].
+            # [state sequence: t, x_e, y_e, x_p1, y_p1, x_p2, y_p2, theta_e, theta_p1, theta_p2].
+            unnormalized_tcoords = jnp.array(
+                [
+                    t,
+                    evader_state[0],
+                    evader_state[1],
+                    persuer_states[0][0],
+                    persuer_states[0][1],
+                    persuer_states[1][0],
+                    persuer_states[1][1],
+                    evader_state[2],
+                    persuer_states[0][2],
+                    persuer_states[1][2],
+                ]
+            )
+            return unnormalized_tcoords
+
+        state = jnp.expand_dims(
+            state_to_unnormalized_tcoords(
+                evader_state, persuer_states, t=self.dataset_state.t_max
+            ),
+            0,
+        )
+        return state
+
     def theta_to_cos_sin(self, state):
         return np.array(
             [state[0], state[1], np.cos(state[2]), np.sin(state[2])], dtype=np.float32
@@ -270,10 +348,9 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = Air3DNpEnv(1, use_hj=True)
+    env = Air3DNpEnv(2, use_hj=True, deepreach_backend=True)
     env = gym.wrappers.TimeLimit(env, max_episode_steps=500)
     obs = env.reset()
-    print(obs.shape)
     done = False
     t = 0
     while not done:
@@ -286,11 +363,10 @@ if __name__ in "__main__":
         t += 1
 
         obs, reward, done, info = env.step(action)
-        # print(f"{reward=}")
         if done:
             print(info)
             print("done")
             break
 
-        env.render()
+        # env.render()
     env.close()

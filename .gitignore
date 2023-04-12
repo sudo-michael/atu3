@@ -130,7 +130,9 @@ dmypy.json
 
 
 wandb/*
-video/*
+videos/*
 runs/*
 models/*
 *db
+
+

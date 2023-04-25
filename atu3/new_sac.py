@@ -37,7 +37,7 @@ def parse_args():
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Safe-Air3D-v0",
+    parser.add_argument("--env-id", type=str, default="Safe-Air9D-v0",
         help="the id of the environment")
     parser.add_argument("--total-timesteps", type=int, default=1_000_000,
         help="total timesteps of the experiments")
@@ -71,6 +71,8 @@ def parse_args():
     # hj 
     parser.add_argument("--use-hj", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
         help="use hj")
+    parser.add_argument("--deepreach-backend", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
+        help="use deepreach")
     
     # other 
     parser.add_argument("--normalize-obs", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -80,9 +82,9 @@ def parse_args():
     return args
 
 
-def make_env(env_id, use_hj, normalize_obs, seed, idx, capture_video, run_name):
+def make_env(env_id, use_hj, deepreach_backend, normalize_obs, seed, idx, capture_video, run_name):
     def thunk():
-        env = gym.make(env_id, use_hj=use_hj)
+        env = gym.make(env_id, use_hj=use_hj, deepreach_backend=deepreach_backend)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
@@ -187,7 +189,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.use_hj, args.normalize_obs, args.seed, 0, args.capture_video, run_name)])
+    envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.use_hj, args.deepreach_backend, args.normalize_obs, args.seed, 0, args.capture_video, run_name)])
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     max_action = float(envs.single_action_space.high[0])

@@ -7,6 +7,7 @@ from atu3.brt.brt_static_obstacle_3d import g as grid
 from atu3.brt.brt_air_3d import car_brt
 from atu3.brt.brt_static_obstacle_3d import goal_r
 from atu3.deepreach.hji_1E2P import load_deepreach
+from atu3.deepreach.dataio import xy_grid
 import itertools
 import jax.numpy as jnp
 
@@ -21,7 +22,7 @@ class Air3DNpEnv(gym.Env):
     def __init__(self, n, use_hj=False, deepreach_backend=False) -> None:
         self.car = car_brt
         # NOTE: let's try making the persuer slower since optimal disturbance makes it hard for the evader to escape
-        self.car.vp = 0.11
+        self.car.vp = 0.21
         self.dt = 0.05
         self.use_hj = use_hj
         self.deepreach_backend = deepreach_backend
@@ -55,7 +56,7 @@ class Air3DNpEnv(gym.Env):
         path = os.path.abspath(__file__)
         if self.deepreach_backend:
             self.opt_ctrl_dstb_fn, self.value_fn, self.dataset_state = load_deepreach(
-                "1e2p_atu3_4"
+                "1e2p_atu3_6"
             )
         else:
             dir_path = os.path.dirname(path)
@@ -68,11 +69,16 @@ class Air3DNpEnv(gym.Env):
     def step(self, action):
         info = {}
         info["used_hj"] = False
+
+        unnormalized_tcoords = self.deepreach_state(
+            self.evader_state, self.persuer_states
+        )
+        value = self.value_fn(jnp.array(unnormalized_tcoords))
+        print(f"Value: {value}")
         if self.use_hj and self.use_opt_ctrl():
             action = self.opt_ctrl()
             info["used_hj"] = True
 
-        # TODO: ensure the opt dstb will capture evader
         self.evader_state = (
             self.car.dynamics_non_hcl(0, self.evader_state, action) * self.dt
             + self.evader_state
@@ -134,32 +140,34 @@ class Air3DNpEnv(gym.Env):
         )
 
     def reset(self, seed=None):
-        self.evader_state = np.array([0.0, 0.0, 0.0])
+        self.evader_state = np.array([0.0, 0.0, np.pi/2])
         # DEBUG: the following cases show when the brt is not working
         # works
         # self.evader_state = np.array([0.0, 0.0, 0.0])
         # self.persuer_states[0] = np.array([1.0, 0.3, -np.pi])
         # doesn't
-        # self.evader_state = np.array([0.0, 0.0, np.pi])
-        # self.persuer_states[0] = np.array([-1.0, -0.3, 0.0])
+        # self.persuer_states[1] = np.array([-1.0, -0.3, 0.0])
+        # self.persuer_states[0] = np.array([0.5, -0.3, -np.pi])
+        self.persuer_states[0] = np.array([1.0, -0.0, -np.pi])
+        self.persuer_states[1] = np.array([-1.0, -0.0, 0.0])
         goal_locations = [
-            np.array([2.5, 2.5]),
-            np.array([0, 3.0]),
-            np.array([-2.5, 2.5]),
-            np.array([3.0, 0]),
-            np.array([2.5, -2.5]),
+            np.array([1.5, 1.5]),
+            np.array([0, 1.5]),
+            np.array([-1.5, 1.5]),
+            np.array([1.5, 0]),
+            np.array([1.5, -1.5]),
         ]
 
         random_idx = np.random.randint(0, len(goal_locations))
         self.goal_location = goal_locations[random_idx]
 
-        for i in range(self.n):
-            self.persuer_states[i] = np.random.uniform(
-                low=-self.world_boundary, high=self.world_boundary
-            )
+        # for i in range(self.n):
+        #     self.persuer_states[i] = np.random.uniform(
+        #         low=-self.world_boundary, high=self.world_boundary
+        #     )
 
             # insert the persuer between the goal and the evader
-            self.persuer_states[i][:2] = goal_locations[random_idx] // 2
+            # self.persuer_states[i][:2] = goal_locations[random_idx] // 2
 
         info = {}
         info["cost"] = 0
@@ -181,33 +189,80 @@ class Air3DNpEnv(gym.Env):
 
         add_robot(self.evader_state, color="blue")
         for i in range(self.n):
-            add_robot(self.persuer_states[i], color="red")
+            if i == 0:
+                add_robot(self.persuer_states[i], color="red")
+            else:
+                add_robot(self.persuer_states[i], color="orange")
         goal = plt.Circle(self.goal_location[:2], radius=self.goal_r, color="g")
         self.ax.add_patch(goal)
 
-        X, Y = np.meshgrid(
-            np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
-            np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
-            indexing="ij",
-        )
+        if not self.deepreach_backend:
+            X, Y = np.meshgrid(
+                np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
+                np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
+                indexing="ij",
+            )
 
-        relative_state = self.relative_state(self.persuer_states[0])
-        index = self.grid.get_index(relative_state)
-        angle = self.evader_state[2] % (2 * np.pi)
-        Xr = X * np.cos(angle) - Y * np.sin(angle)
-        Yr = X * np.sin(angle) + Y * np.cos(angle)
+            relative_state = self.relative_state(self.persuer_states[0])
+            index = self.grid.get_index(relative_state)
+            angle = self.evader_state[2] % (2 * np.pi)
+            Xr = X * np.cos(angle) - Y * np.sin(angle)
+            Yr = X * np.sin(angle) + Y * np.cos(angle)
 
-        # DEBUG: visualize relative state
-        # add_robot(relative_state, color="orange")
-        # add_robot(np.zeros(3), color="yellow")
+            # DEBUG: visualize relative state
+            # add_robot(relative_state, color="orange")
+            # add_robot(np.zeros(3), color="yellow")
 
-        self.ax.contour(
-            Xr + self.evader_state[0],
-            Yr + self.evader_state[1],
-            # X, Y,
-            self.brt[:, :, index[2]],
-            levels=[0.1],
-        )
+            self.ax.contour(
+                Xr + self.evader_state[0],
+                Yr + self.evader_state[1],
+                # X, Y,
+                self.brt[:, :, index[2]],
+                levels=[0.1],
+            )
+
+        if self.deepreach_backend:
+            # Get the meshgrid in the (x, y) coordinate
+            grid_points = 200
+            mgrid_coords = xy_grid(
+                200, x_max=self.dataset_state.alpha["x"], y_max=self.dataset_state.alpha["y"]
+            )
+            ones = jnp.ones((mgrid_coords.shape[0], 1))
+            unnormalized_tcoords = jnp.concatenate(
+                (
+                    self.dataset_state.t_max * ones,
+                    mgrid_coords,
+                    self.persuer_states[0][0] * ones,
+                    self.persuer_states[0][1] * ones,
+                    self.persuer_states[1][0] * ones,
+                    self.persuer_states[1][1] * ones,
+                    self.evader_state[2] * ones,
+                    self.persuer_states[0][2] * ones,
+                    self.persuer_states[1][2] * ones,
+                ),
+                axis=1,
+            )
+            V = self.value_fn(unnormalized_tcoords)
+
+            V = np.array(V)
+            V = V.reshape((grid_points, grid_points))
+
+            # unnormalize value function
+            V = (V * self.dataset_state.var) /  self.dataset_state.norm_to + self.dataset_state.mean
+
+            V = (V <= 0.001) * 1.0
+
+            X, Y = np.meshgrid(
+                np.linspace(-self.dataset_state.alpha['x'], self.dataset_state.alpha['x'], grid_points),
+                np.linspace(-self.dataset_state.alpha['y'], self.dataset_state.alpha['y'], grid_points),
+                indexing="ij",
+            )
+
+            self.ax.contour(
+                X, Y, V,
+                levels=[0.1],
+            )
+
         self.ax.set_xlim(-5, 5)
         self.ax.set_ylim(-5, 5)
         self.ax.set_aspect("equal")
@@ -229,7 +284,7 @@ class Air3DNpEnv(gym.Env):
         plt.close()
         return
 
-    def use_opt_ctrl(self, threshold=0.2):
+    def use_opt_ctrl(self, threshold=0.001):
         if self.deepreach_backend:
             unnormalized_tcoords = self.deepreach_state(
                 self.evader_state, self.persuer_states
@@ -249,8 +304,8 @@ class Air3DNpEnv(gym.Env):
                 jnp.array(unnormalized_tcoords)
             )  # (1, ), _
             return np.array(opt_ctrl[0])  # (1, )
-        elif self.n > 1:
-            raise NotImplementedError("Only support 1 persuer for now")
+        # elif self.n > 1:
+        #     raise NotImplementedError("Only support 1 persuer for now")
         else:
             relative_state = self.relative_state(self.persuer_states[0])
             index = self.grid.get_index(relative_state)
@@ -265,8 +320,6 @@ class Air3DNpEnv(gym.Env):
             )
             _, opt_dstbs = self.opt_ctrl_dstb_fn(jnp.array(unnormalized_tcoords))
             return np.array(opt_dstbs)
-        elif self.n > 1:
-            raise NotImplementedError("Only support 1 persuer for now")
         else:
             relative_state = self.relative_state(persuer_state)
             index = self.grid.get_index(relative_state)
@@ -307,7 +360,7 @@ class Air3DNpEnv(gym.Env):
         return np.concatenate((tuple(itertools.chain.from_iterable(t))))
 
     def deepreach_state(self, evader_state, persuer_states):
-        def state_to_unnormalized_tcoords(evader_state, persuer_states, t=0.0):
+        def state_to_unnormalized_tcoords(evader_state, persuer_states, t):
             # [state sequence: 0, 1,   2,   3     4,    5,    6,    7,       8,        9].
             # [state sequence: t, x_e, y_e, x_p1, y_p1, x_p2, y_p2, theta_e, theta_p1, theta_p2].
             unnormalized_tcoords = jnp.array(
@@ -348,25 +401,33 @@ if __name__ in "__main__":
 
     gym.logger.set_level(10)
 
-    env = Air3DNpEnv(2, use_hj=True, deepreach_backend=True)
-    env = gym.wrappers.TimeLimit(env, max_episode_steps=500)
+    # env = Air3DNpEnv(2, use_hj=True, deepreach_backend=True)
+    # env = gym.wrappers.TimeLimit(env, max_episode_steps=500)
+    def make_env():
+        def thunk():
+            return gym.make('Safe-Air9D-v0', n=2, use_hj=True, deepreach_backend=True)
+
+        return thunk
+    # envs = gym.vector.SyncVectorEnv([make_env()])
+    env = gym.make('Safe-Air9D-v0', n=2, use_hj=True, deepreach_backend=True)
     obs = env.reset()
     done = False
     t = 0
     while not done:
         action = env.action_space.sample()
-        if t % 2 == 0:
-            action = np.array([env.unwrapped.car.we_max])
-        else:
-            action = np.array([-env.unwrapped.car.we_max])
+        # if t % 2 == 0:
+        #     action = np.array([env.unwrapped.car.we_max])
+        # else:
+        #     action = np.array([-env.unwrapped.car.we_max])
         _, _, _, info = env.step(action)
         t += 1
 
         obs, reward, done, info = env.step(action)
+        print(t)
         if done:
             print(info)
             print("done")
             break
 
-        # env.render()
+        env.render()
     env.close()

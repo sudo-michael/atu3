@@ -30,7 +30,6 @@ from atu3.deepreach.hj_functions import initialize_hji_loss, initialize_train_st
 from atu3.deepreach.utils import unnormalize_value_function, normalize_value_function, cond_mkdir
 
 import wandb
-# from train import train
 
 import orbax.checkpoint as orbax
 from flax.training import checkpoints

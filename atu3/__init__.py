@@ -22,7 +22,7 @@ import numpy as np
 # )
 
 register(
-    id="Safe-StaticAir9d-v0",
+    id="Safe-StaticAir9D-v0",
     entry_point="atu3.envs:StaticAirNdEnv",
     kwargs={"n": 2},
     max_episode_steps=450,
@@ -32,6 +32,13 @@ register(
     id="Safe-Air3D-v0",
     entry_point="atu3.envs:Air3DNpEnv",
     kwargs={"n": 1},
+    max_episode_steps=450,
+)
+
+register(
+    id="Safe-Air9D-v0",
+    entry_point="atu3.envs:Air3DNpEnv",
+    kwargs={"n": 2},
     max_episode_steps=450,
 )
 

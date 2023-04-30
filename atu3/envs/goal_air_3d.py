@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 from gym.spaces import Dict, Box
 import numpy as np
 import matplotlib.pyplot as plt

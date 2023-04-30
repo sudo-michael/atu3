@@ -1,5 +1,5 @@
 # environment from https://github.com/abalakrishna123/recovery-rl/blob/master/env/navigation1.py
-import gym
+import gymnasium as gym
 import numpy as np
 
 START_POS = [-50, 0]

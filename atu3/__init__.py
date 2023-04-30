@@ -1,3 +1,4 @@
+import gymnasium as gymnasium as gym
 from gym.envs.registration import register
 import numpy as np
 

@@ -5,7 +5,7 @@ import random
 import time
 from distutils.util import strtobool
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -67,6 +67,8 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+    parser.add_argument("--lagrange", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="use lagrange multiplier")
 
     # hj 
     parser.add_argument("--use-hj", type=lambda x:bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -202,6 +204,15 @@ if __name__ == "__main__":
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
+    
+    if args.lagrange:
+        q_safe_1 = SoftQNetwork(envs).to(device)
+        q_safe_2 = SoftQNetwork(envs).to(device)
+        q_safe_1_target = SoftQNetwork(envs).to(device)
+        q_safe_2_target = SoftQNetwork(envs).to(device)
+        q_safe_1_target.load_state_dict(qf1.state_dict())
+        q_safe_2_target.load_state_dict(qf2.state_dict())
+        q_safe_optimizer = optim.Adam(list(q_safe_1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     # Automatic entropy tuning
@@ -212,6 +223,11 @@ if __name__ == "__main__":
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
     else:
         alpha = args.alpha
+
+    if args.lagrange:
+        log_lambda = torch.zeros(1, requires_grad=True, device=device)
+        lmda = log_lambda.exp().item()
+        lagrange_optimizer = optim.Adam([log_lambda], lr=args.q_lr)
 
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
@@ -305,6 +321,7 @@ if __name__ == "__main__":
                         a_optimizer.step()
                         alpha = log_alpha.exp().item()
 
+
             # update the target networks
             if global_step % args.target_network_frequency == 0:
                 for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
@@ -312,12 +329,25 @@ if __name__ == "__main__":
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
+                if args.lagrange:
+                    for param, target_param in zip(q_safe_1.parameters(), q_safe_1_target.parameters()):
+                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                    for param, target_param in zip(q_safe_2.parameters(), q_safe_2_target.parameters()):
+                        target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+
             if global_step % 100 == 0:
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
+                if args.lagrange:
+                    writer.add_scalar("losses/q_safe1_values", q_safe1_a_values.mean().item(), global_step)
+                    writer.add_scalar("losses/q_safe2_values", q_safe2_a_values.mean().item(), global_step)
+                    writer.add_scalar("losses/q_safe1_loss", q_safe1_loss.item(), global_step)
+                    writer.add_scalar("losses/q_safe2_loss", q_safe2_loss.item(), global_step)
+                    writer.add_scalar("losses/q_safe_loss", q_safe_loss.item() / 2.0, global_step)
+
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar("losses/alpha", alpha, global_step)
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)

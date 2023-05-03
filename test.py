@@ -1,6 +1,6 @@
 # %%
 import atu3
-import gym
+import gymnasium as gym
 from stable_baselines3 import HerReplayBuffer
 from stable_baselines3.common.buffers import DictReplayBuffer, ReplayBuffer
 from stable_baselines3.common.vec_env import DummyVecEnv

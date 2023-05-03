@@ -1,5 +1,4 @@
-import gymnasium as gymnasium as gym
-from gym.envs.registration import register
+from gymnasium.envs.registration import register
 import numpy as np
 
 # register(
@@ -22,12 +21,12 @@ import numpy as np
 #     max_episode_steps=450,
 # )
 
-register(
-    id="Safe-StaticAir9D-v0",
-    entry_point="atu3.envs:StaticAirNdEnv",
-    kwargs={"n": 2},
-    max_episode_steps=450,
-)
+# register(
+#     id="Safe-StaticAir9D-v0",
+#     entry_point="atu3.envs:StaticAirNdEnv",
+#     kwargs={"n": 2},
+#     max_episode_steps=450,
+# )
 
 register(
     id="Safe-Air3D-v0",
@@ -36,12 +35,12 @@ register(
     max_episode_steps=450,
 )
 
-register(
-    id="Safe-Air9D-v0",
-    entry_point="atu3.envs:Air3DNpEnv",
-    kwargs={"n": 2},
-    max_episode_steps=450,
-)
+# register(
+#     id="Safe-Air9D-v0",
+#     entry_point="atu3.envs:Air3DNpEnv",
+#     kwargs={"n": 2},
+#     max_episode_steps=450,
+# )
 
 # register(
 #     id="Safe-GoalAir3d-NoWalls-v0",

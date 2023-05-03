@@ -15,11 +15,13 @@ import jax.numpy as jnp
 class Air3DNpEnv(gym.Env):
     metadata = {
         "render_modes": ["human", "rgb_array"],
-        "render.modes": ["human", "rgb_array"],
         "render_fps": 30,
     }
 
-    def __init__(self, n, use_hj=False, deepreach_backend=False) -> None:
+    def __init__(
+        self, render_mode=None, n=1, use_hj=False, deepreach_backend=False
+    ) -> None:
+        self.render_mode = render_mode
         self.car = car_brt
         # NOTE: let's try making the persuer slower since optimal disturbance makes it hard for the evader to escape
         self.car.vp = 0.21
@@ -70,11 +72,13 @@ class Air3DNpEnv(gym.Env):
         info = {}
         info["used_hj"] = False
 
-        unnormalized_tcoords = self.deepreach_state(
-            self.evader_state, self.persuer_states
-        )
-        value = self.value_fn(jnp.array(unnormalized_tcoords))
-        print(f"Value: {value}")
+        if self.deepreach_backend:
+            unnormalized_tcoords = self.deepreach_state(
+                self.evader_state, self.persuer_states
+            )
+            value = self.value_fn(jnp.array(unnormalized_tcoords))
+            print(f"Value: {value}")
+
         if self.use_hj and self.use_opt_ctrl():
             action = self.opt_ctrl()
             info["used_hj"] = True
@@ -110,7 +114,7 @@ class Air3DNpEnv(gym.Env):
 
         dist_to_goal = np.linalg.norm(self.evader_state[:2] - self.goal_location[:2])
         reward = -dist_to_goal
-        done = False
+        terminated = False
 
         info["cost"] = 0
 
@@ -118,7 +122,7 @@ class Air3DNpEnv(gym.Env):
             np.linalg.norm(self.evader_state[:2] - self.goal_location)
             < self.goal_r + self.car.r
         ):
-            done = True
+            terminated = True
             info["collision"] = "goal"
         elif np.any(
             [
@@ -127,20 +131,25 @@ class Air3DNpEnv(gym.Env):
                 for i in range(self.n)
             ]
         ):
-            done = True
+            terminated = True
             info["collision"] = "persuer"
+
+        if self.render_mode == "human":
+            self.render()
 
         return (
             np.copy(
                 self.get_obs(self.evader_state, self.persuer_states, self.goal_location)
             ),
             reward,
-            done,
+            terminated,
+            False,
             info,
         )
 
-    def reset(self, seed=None):
-        self.evader_state = np.array([0.0, 0.0, np.pi/2])
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
+        self.evader_state = np.array([0.0, 0.0, np.pi / 2])
         # DEBUG: the following cases show when the brt is not working
         # works
         # self.evader_state = np.array([0.0, 0.0, 0.0])
@@ -166,16 +175,22 @@ class Air3DNpEnv(gym.Env):
         #         low=-self.world_boundary, high=self.world_boundary
         #     )
 
-            # insert the persuer between the goal and the evader
-            # self.persuer_states[i][:2] = goal_locations[random_idx] // 2
+        # insert the persuer between the goal and the evader
+        # self.persuer_states[i][:2] = goal_locations[random_idx] // 2
 
         info = {}
         info["cost"] = 0
         info["collision"] = "none"
 
-        return self.get_obs(self.evader_state, self.persuer_states, self.goal_location)
+        if self.render_mode == "human":
+            self.render()
 
-    def render(self, mode="human"):
+        return self.get_obs(self.evader_state, self.persuer_states, self.goal_location), info
+
+    def render(self):
+        if self.render_mode is None:
+            return
+
         self.ax.clear()
 
         def add_robot(state, color="green"):
@@ -198,8 +213,12 @@ class Air3DNpEnv(gym.Env):
 
         if not self.deepreach_backend:
             X, Y = np.meshgrid(
-                np.linspace(self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]),
-                np.linspace(self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]),
+                np.linspace(
+                    self.grid.min[0], self.grid.max[0], self.grid.pts_each_dim[0]
+                ),
+                np.linspace(
+                    self.grid.min[1], self.grid.max[1], self.grid.pts_each_dim[1]
+                ),
                 indexing="ij",
             )
 
@@ -225,7 +244,9 @@ class Air3DNpEnv(gym.Env):
             # Get the meshgrid in the (x, y) coordinate
             grid_points = 200
             mgrid_coords = xy_grid(
-                200, x_max=self.dataset_state.alpha["x"], y_max=self.dataset_state.alpha["y"]
+                200,
+                x_max=self.dataset_state.alpha["x"],
+                y_max=self.dataset_state.alpha["y"],
             )
             ones = jnp.ones((mgrid_coords.shape[0], 1))
             unnormalized_tcoords = jnp.concatenate(
@@ -248,18 +269,30 @@ class Air3DNpEnv(gym.Env):
             V = V.reshape((grid_points, grid_points))
 
             # unnormalize value function
-            V = (V * self.dataset_state.var) /  self.dataset_state.norm_to + self.dataset_state.mean
+            V = (
+                V * self.dataset_state.var
+            ) / self.dataset_state.norm_to + self.dataset_state.mean
 
             V = (V <= 0.001) * 1.0
 
             X, Y = np.meshgrid(
-                np.linspace(-self.dataset_state.alpha['x'], self.dataset_state.alpha['x'], grid_points),
-                np.linspace(-self.dataset_state.alpha['y'], self.dataset_state.alpha['y'], grid_points),
+                np.linspace(
+                    -self.dataset_state.alpha["x"],
+                    self.dataset_state.alpha["x"],
+                    grid_points,
+                ),
+                np.linspace(
+                    -self.dataset_state.alpha["y"],
+                    self.dataset_state.alpha["y"],
+                    grid_points,
+                ),
                 indexing="ij",
             )
 
             self.ax.contour(
-                X, Y, V,
+                X,
+                Y,
+                V,
                 levels=[0.1],
             )
 
@@ -274,11 +307,11 @@ class Air3DNpEnv(gym.Env):
         img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
         img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
 
-        if mode == "human":
+        if self.render_mode == "human":
             self.fig.canvas.flush_events()
             plt.pause(1 / self.metadata["render_fps"])
-            # plt.show()
-        return img
+        elif self.render_mode == "rgb_array":
+            return img
 
     def close(self):
         plt.close()
@@ -357,7 +390,7 @@ class Air3DNpEnv(gym.Env):
             list(map(self.theta_to_cos_sin, persuer_states)),
             [goal[:2]],
         )
-        return np.concatenate((tuple(itertools.chain.from_iterable(t))))
+        return np.concatenate((tuple(itertools.chain.from_iterable(t)))).astype(np.float32)
 
     def deepreach_state(self, evader_state, persuer_states):
         def state_to_unnormalized_tcoords(evader_state, persuer_states, t):
@@ -403,31 +436,33 @@ if __name__ in "__main__":
 
     # env = Air3DNpEnv(2, use_hj=True, deepreach_backend=True)
     # env = gym.wrappers.TimeLimit(env, max_episode_steps=500)
-    def make_env():
-        def thunk():
-            return gym.make('Safe-Air9D-v0', n=2, use_hj=True, deepreach_backend=True)
+    # def make_env():
+    #     def thunk():
+    #         return gym.make('Safe-Air9D-v0', n=2, use_hj=True, deepreach_backend=True)
 
-        return thunk
+    #     return thunk
     # envs = gym.vector.SyncVectorEnv([make_env()])
-    env = gym.make('Safe-Air9D-v0', n=2, use_hj=True, deepreach_backend=True)
-    obs = env.reset()
+    # breakpoint()
+    # import wandb
+    # wandb.init(monitor_gym=True)
+    env = gym.make("Safe-Air3D-v0", render_mode='rgb_array')
+    env = gym.wrappers.RecordVideo(env, video_folder="./videos/")
+    # env = gym.make("CartPole-v1")
+    # env = Air3DNpEnv(1, use_hj=False, deepreach_backend=False)
+    obs, info = env.reset()
     done = False
     t = 0
-    while not done:
+    for t in range(int(1e5)):
         action = env.action_space.sample()
         # if t % 2 == 0:
         #     action = np.array([env.unwrapped.car.we_max])
         # else:
         #     action = np.array([-env.unwrapped.car.we_max])
-        _, _, _, info = env.step(action)
-        t += 1
+        obs, reward, terminated, truncated, info = env.step(action)
 
-        obs, reward, done, info = env.step(action)
-        print(t)
+        done = terminated or truncated
         if done:
-            print(info)
-            print("done")
-            break
+            done = False
+            obs, info = env.reset()
 
-        env.render()
     env.close()

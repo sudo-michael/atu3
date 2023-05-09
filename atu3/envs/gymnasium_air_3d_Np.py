@@ -124,14 +124,16 @@ class Air3DNpEnv(gym.Env):
         ):
             terminated = True
             info["collision"] = "goal"
+        # TODO: maybe change this to not be too close to a persuer instead of stopping on collision
         elif np.any(
             [
                 np.linalg.norm(self.evader_state[:2] - self.persuer_states[i][:2])
-                < self.car.r * 2
+                < self.car.r * 3
                 for i in range(self.n)
             ]
         ):
-            terminated = True
+            # terminated = True
+            info['cost'] = 1.0
             info["collision"] = "persuer"
 
         if self.render_mode == "human":
@@ -143,13 +145,13 @@ class Air3DNpEnv(gym.Env):
             ),
             reward,
             terminated,
-            False,
+            False, # truncated
             info,
         )
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        self.evader_state = np.array([0.0, 0.0, np.pi / 2])
+        # self.evader_state = np.array([0.0, 0.0, np.pi / 2])
         # DEBUG: the following cases show when the brt is not working
         # works
         # self.evader_state = np.array([0.0, 0.0, 0.0])
@@ -157,7 +159,7 @@ class Air3DNpEnv(gym.Env):
         # doesn't
         # self.persuer_states[1] = np.array([-1.0, -0.3, 0.0])
         # self.persuer_states[0] = np.array([0.5, -0.3, -np.pi])
-        self.persuer_states[0] = np.array([1.0, -0.0, -np.pi])
+        # self.persuer_states[0] = np.array([1.0, -0.0, -np.pi])
         # self.persuer_states[1] = np.array([-1.0, -0.0, 0.0])
         goal_locations = [
             np.array([1.5, 1.5]),
@@ -170,10 +172,13 @@ class Air3DNpEnv(gym.Env):
         random_idx = np.random.randint(0, len(goal_locations))
         self.goal_location = goal_locations[random_idx]
 
-        # for i in range(self.n):
-        #     self.persuer_states[i] = np.random.uniform(
-        #         low=-self.world_boundary, high=self.world_boundary
-        #     )
+        self.evader_state = np.random.uniform(
+            low=-self.world_boundary, high=self.world_boundary
+        )
+        for i in range(self.n):
+            self.persuer_states[i] = np.random.uniform(
+                low=-self.world_boundary, high=self.world_boundary
+            )
 
         # insert the persuer between the goal and the evader
         # self.persuer_states[i][:2] = goal_locations[random_idx] // 2
@@ -446,9 +451,10 @@ if __name__ in "__main__":
     # import wandb
     # wandb.init(monitor_gym=True)
     env = gym.make("Safe-Air3D-v0", render_mode='rgb_array')
-    env = gym.wrappers.RecordVideo(env, video_folder="./videos/")
+    # env = gym.wrappers.RecordVideo(env, video_folder="./videos/")
     # env = gym.make("CartPole-v1")
     # env = Air3DNpEnv(1, use_hj=False, deepreach_backend=False)
+    breakpoint()
     obs, info = env.reset()
     done = False
     t = 0
@@ -463,6 +469,8 @@ if __name__ in "__main__":
         done = terminated or truncated
         if done:
             done = False
+            print(info)
+            exit()
             obs, info = env.reset()
 
     env.close()

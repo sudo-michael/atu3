@@ -9,7 +9,7 @@ import torch
 from gymnasium import spaces
 from omnisafe.envs.core import CMDP, env_register
 from omnisafe.typing import Box
-
+import datetime
 from safety_gymnasium.wrappers import Gymnasium2SafetyGymnasium
 
 
@@ -48,10 +48,13 @@ class OmniSafeAir3DEnv(CMDP):
         """
         super().__init__(env_id)
         self._env_id = env_id
+        now = datetime.datetime.now()
+        now = now.strftime("%Y-%m-%d_%H-%M-%S")
         if num_envs == 1:
             # set healthy_reward=0.0 for removing the safety constraint in reward
-            self._env = Gymnasium2SafetyGymnasium(gymnasium.make(id=env_id, **kwargs))
-            self._env = Gymnasium2SafetyGymnasium(gymnasium.make(id=env_id, **kwargs))
+            env = gymnasium.make(id=env_id, render_mode="rgb_array", **kwargs)
+            env = gymnasium.wrappers.RecordVideo(env, f"videos/{now}")
+            self._env = Gymnasium2SafetyGymnasium(env)
             assert isinstance(self._env.action_space, Box), 'Only support Box action space.'
             assert isinstance(
                 self._env.observation_space,

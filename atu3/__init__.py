@@ -31,7 +31,7 @@ import numpy as np
 register(
     id="Safe-Air3D-v0",
     entry_point="atu3.envs:Air3DNpEnv",
-    kwargs={"n": 1},
+    kwargs={"n": 1, "use_hj": True},
     max_episode_steps=450,
 )
 

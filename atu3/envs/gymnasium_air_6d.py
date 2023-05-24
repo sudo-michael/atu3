@@ -131,7 +131,7 @@ class Air6dEnv(gym.Env):
         # return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, False, info
         return np.copy(self.get_obs(info['obs'], info['persuer'], info['goal'])), reward, done, False, info
 
-    def reset(self, * seed=None, options=None):
+    def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         if self.fixed_goal:
             self.goal_location = np.array([0.5, 0.5])
@@ -398,8 +398,9 @@ if __name__ in "__main__":
     # env = gym.make("Safe-Air3d-NoWalls-v0")
     env = gym.wrappers.TimeLimit(env, 100)
     # env = gym.wrappers.RecordVideo(env, f"debug_videos/{run_name}", episode_trigger=lambda x: True)
-    # env = gym.make("Safe-Air3d-v0")
-    env = Air6dEnv(walls=False, fixed_goal=True)
+    env = gym.make("Safe-Air3d-v0")
+    # env = Air6dEnv(walls=False, fixed_goal=True)
+    env = atu3.wrappers.RecordCollisions(env)
     obs = env.reset()
     done = False
     while not done:

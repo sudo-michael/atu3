@@ -71,6 +71,7 @@ class Air3DNpEnv(gym.Env):
     def step(self, action):
         info = {}
         info["used_hj"] = False
+        info["collision"] = False
 
         if self.deepreach_backend:
             unnormalized_tcoords = self.deepreach_state(
@@ -124,15 +125,14 @@ class Air3DNpEnv(gym.Env):
         ):
             terminated = True
             info["collision"] = "goal"
-        # TODO: maybe change this to not be too close to a persuer instead of stopping on collision
         elif np.any(
             [
                 np.linalg.norm(self.evader_state[:2] - self.persuer_states[i][:2])
-                < self.car.r * 3
+                < self.car.r * 2
                 for i in range(self.n)
             ]
         ):
-            # terminated = True
+            terminated = True
             info['cost'] = 1.0
             info["collision"] = "persuer"
 
@@ -151,7 +151,7 @@ class Air3DNpEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        # self.evader_state = np.array([0.0, 0.0, np.pi / 2])
+
         # DEBUG: the following cases show when the brt is not working
         # works
         # self.evader_state = np.array([0.0, 0.0, 0.0])
@@ -173,15 +173,17 @@ class Air3DNpEnv(gym.Env):
         self.goal_location = goal_locations[random_idx]
 
         self.evader_state = np.random.uniform(
-            low=-self.world_boundary, high=self.world_boundary
+            low=np.array([-0.75, -0.75, -np.pi]),
+            high=np.array([0.75, 0.75, np.pi]),
         )
+
         for i in range(self.n):
             self.persuer_states[i] = np.random.uniform(
                 low=-self.world_boundary, high=self.world_boundary
             )
 
-        # insert the persuer between the goal and the evader
-        # self.persuer_states[i][:2] = goal_locations[random_idx] // 2
+            # insert the persuer between the goal and the evader
+            self.persuer_states[i][:2] = goal_locations[random_idx] // 2
 
         info = {}
         info["cost"] = 0
@@ -450,27 +452,22 @@ if __name__ in "__main__":
     # breakpoint()
     # import wandb
     # wandb.init(monitor_gym=True)
-    env = gym.make("Safe-Air3D-v0", render_mode='rgb_array')
+    env = gym.make("Safe-Air3D-v0", use_hj=True, render_mode='human')
+    from atu3.wrappers import RecordCollisions
+    env = RecordCollisions(env)
     # env = gym.wrappers.RecordVideo(env, video_folder="./videos/")
     # env = gym.make("CartPole-v1")
     # env = Air3DNpEnv(1, use_hj=False, deepreach_backend=False)
-    breakpoint()
     obs, info = env.reset()
     done = False
     t = 0
     for t in range(int(1e5)):
         action = env.action_space.sample()
-        # if t % 2 == 0:
-        #     action = np.array([env.unwrapped.car.we_max])
-        # else:
-        #     action = np.array([-env.unwrapped.car.we_max])
         obs, reward, terminated, truncated, info = env.step(action)
 
         done = terminated or truncated
         if done:
-            done = False
             print(info)
-            exit()
             obs, info = env.reset()
 
     env.close()

@@ -9,7 +9,7 @@ env_id = "Safe-Air3D-v0"
 
 custom_cfgs = {
     'train_cfgs': {
-        'total_steps': 1_000_000,
+        'total_steps': 204_800,
         'vector_env_nums': 1,
         'parallel': 1,
     },
@@ -22,8 +22,9 @@ custom_cfgs = {
         'wandb_project': 'atu3',
     },
     'lagrange_cfgs': {
-        'cost_limit': 5.0
+        'cost_limit': 1.0
     },
 }
-agent = omnisafe.Agent('PPOLag', env_id, custom_cfgs=custom_cfgs)
+agent = omnisafe.Agent('SACLag', env_id, custom_cfgs=custom_cfgs)
 agent.learn()
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/mambaforge/lib

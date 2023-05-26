@@ -15,7 +15,7 @@ class DeepReachBackend:
     time_resolution=3
 
     def __init__(self, experiment_dir) -> None:
-        self.dynamics = MultiVehicleCollision(diff_model=False)
+        self.dynamics = MultiVehicleCollision(diff_model=True)
         self.model = SingleBVPNet(
             in_features=self.dynamics.input_dim,
             out_features=1,

@@ -35,6 +35,13 @@ register(
     max_episode_steps=450,
 )
 
+register(
+    id="Safe-Air6D-v0",
+    entry_point="atu3.envs:Air3DNpEnv",
+    kwargs={"n": 2, "use_hj": True, 'deepreach_backend': True},
+    max_episode_steps=450,
+)
+
 # register(
 #     id="Safe-Air9D-v0",
 #     entry_point="atu3.envs:Air3DNpEnv",

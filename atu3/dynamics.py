@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from utils import diff_operators
+from atu3.deepreach_verification.utils import diff_operators
 
 import math
 import torch
@@ -778,12 +778,12 @@ class MultiVehicleCollision(Dynamics):
 
     def state_test_range(self):
         return [
-            [-1, 1],
-            [-1, 1],
-            [-1, 1],
-            [-1, 1],
-            [-1, 1],
-            [-1, 1],
+            [-5, 5],
+            [-5, 5],
+            [-5, 5],
+            [-5, 5],
+            [-5, 5],
+            [-5, 5],
             [-math.pi, math.pi],
             [-math.pi, math.pi],
             [-math.pi, math.pi],

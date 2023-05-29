@@ -8,8 +8,12 @@ from atu3.brt.brt_air_3d import car_brt
 from atu3.brt.brt_static_obstacle_3d import goal_r
 from atu3.deepreach.hji_1E2P import load_deepreach
 from atu3.deepreach.dataio import xy_grid
+from atu3.envs.deepreach_backend import DeepReachBackend
 import itertools
-import jax.numpy as jnp
+
+# import jax.numpy as jnp
+
+import torch
 
 
 class Air3DNpEnv(gym.Env):
@@ -30,6 +34,7 @@ class Air3DNpEnv(gym.Env):
         self.deepreach_backend = deepreach_backend
         if self.deepreach_backend:
             assert n == 2
+            self.deepreach = DeepReachBackend()
         self.n = n
 
         self.action_space = gym.spaces.Box(
@@ -56,11 +61,11 @@ class Air3DNpEnv(gym.Env):
         self.fig, self.ax = plt.subplots(figsize=(5, 5))
 
         path = os.path.abspath(__file__)
-        if self.deepreach_backend:
-            self.opt_ctrl_dstb_fn, self.value_fn, self.dataset_state = load_deepreach(
-                "1e2p_atu3_6"
-            )
-        else:
+        # if self.deepreach_backend:
+        # self.opt_ctrl_dstb_fn, self.value_fn, self.dataset_state = load_deepreach(
+        #     "1e2p_atu3_6"
+        # )
+        if not self.deepreach_backend:
             dir_path = os.path.dirname(path)
             self.brt = np.load(os.path.join(dir_path, f"assets/brts/air3d_brt_0.npy"))
             self.backup_brt = np.load(
@@ -77,8 +82,8 @@ class Air3DNpEnv(gym.Env):
             unnormalized_tcoords = self.deepreach_state(
                 self.evader_state, self.persuer_states
             )
-            value = self.value_fn(jnp.array(unnormalized_tcoords))
-            print(f"Value: {value}")
+            value = self.deepreach.V(unnormalized_tcoords)
+            # print(f"Value: {value}")
 
         if self.use_hj and self.use_opt_ctrl():
             action = self.opt_ctrl()
@@ -95,7 +100,7 @@ class Air3DNpEnv(gym.Env):
             for i in range(self.n):
                 self.persuer_states[i] = (
                     self.car.dynamics_non_hcl(
-                        0, self.persuer_states[i], persuer_actions[i], is_evader=False
+                        0, self.persuer_states[i], persuer_actions[0][i], is_evader=False
                     )
                     * self.dt
                     + self.persuer_states[i]
@@ -133,7 +138,7 @@ class Air3DNpEnv(gym.Env):
             ]
         ):
             terminated = True
-            info['cost'] = 1.0
+            info["cost"] = 1.0
             info["collision"] = "persuer"
 
         if self.render_mode == "human":
@@ -145,7 +150,7 @@ class Air3DNpEnv(gym.Env):
             ),
             reward,
             terminated,
-            False, # truncated
+            False,  # truncated
             info,
         )
 
@@ -192,7 +197,10 @@ class Air3DNpEnv(gym.Env):
         if self.render_mode == "human":
             self.render()
 
-        return self.get_obs(self.evader_state, self.persuer_states, self.goal_location), info
+        return (
+            self.get_obs(self.evader_state, self.persuer_states, self.goal_location),
+            info,
+        )
 
     def render(self):
         if self.render_mode is None:
@@ -329,8 +337,8 @@ class Air3DNpEnv(gym.Env):
             unnormalized_tcoords = self.deepreach_state(
                 self.evader_state, self.persuer_states
             )
-            value = self.value_fn(jnp.array(unnormalized_tcoords))
-            return value.item() < threshold
+            value = self.deepreach.V(unnormalized_tcoords)
+            return value < threshold
         else:
             relative_state = self.relative_state(self.persuer_states[0])
             return self.grid.get_value(self.brt, relative_state) < threshold
@@ -340,9 +348,10 @@ class Air3DNpEnv(gym.Env):
             unnormalized_tcoords = self.deepreach_state(
                 self.evader_state, self.persuer_states
             )
-            opt_ctrl, _ = self.opt_ctrl_dstb_fn(
-                jnp.array(unnormalized_tcoords)
-            )  # (1, ), _
+            # opt_ctrl, _ = self.opt_ctrl_dstb_fn(
+            #     jnp.array(unnormalized_tcoords)
+            # )  # (1, ), _
+            opt_ctrl = self.deepreach.opt_ctrl_dstb(unnormalized_tcoords)
             return np.array(opt_ctrl[0])  # (1, )
         # elif self.n > 1:
         #     raise NotImplementedError("Only support 1 persuer for now")
@@ -358,8 +367,8 @@ class Air3DNpEnv(gym.Env):
             unnormalized_tcoords = self.deepreach_state(
                 self.evader_state, self.persuer_states
             )
-            _, opt_dstbs = self.opt_ctrl_dstb_fn(jnp.array(unnormalized_tcoords))
-            return np.array(opt_dstbs)
+            _, opt_dstbs = self.deepreach.opt_ctrl_dstb(unnormalized_tcoords)
+            return np.array(opt_dstbs)  # (1, 2)
         else:
             relative_state = self.relative_state(persuer_state)
             index = self.grid.get_index(relative_state)
@@ -397,34 +406,29 @@ class Air3DNpEnv(gym.Env):
             list(map(self.theta_to_cos_sin, persuer_states)),
             [goal[:2]],
         )
-        return np.concatenate((tuple(itertools.chain.from_iterable(t)))).astype(np.float32)
+        return np.concatenate((tuple(itertools.chain.from_iterable(t)))).astype(
+            np.float32
+        )
 
     def deepreach_state(self, evader_state, persuer_states):
-        def state_to_unnormalized_tcoords(evader_state, persuer_states, t):
-            # [state sequence: 0, 1,   2,   3     4,    5,    6,    7,       8,        9].
-            # [state sequence: t, x_e, y_e, x_p1, y_p1, x_p2, y_p2, theta_e, theta_p1, theta_p2].
-            unnormalized_tcoords = jnp.array(
-                [
-                    t,
-                    evader_state[0],
-                    evader_state[1],
-                    persuer_states[0][0],
-                    persuer_states[0][1],
-                    persuer_states[1][0],
-                    persuer_states[1][1],
-                    evader_state[2],
-                    persuer_states[0][2],
-                    persuer_states[1][2],
-                ]
-            )
-            return unnormalized_tcoords
+        state = torch.tensor(
+            [
+                    [
+                        1.0,  # t_max
+                        evader_state[0],
+                        evader_state[1],
+                        persuer_states[0][0],
+                        persuer_states[0][1],
+                        persuer_states[1][0],
+                        persuer_states[1][1],
+                        evader_state[2],
+                        persuer_states[0][2],
+                        persuer_states[1][2],
+                    ]
+            ],
+            device="cuda",
+        ).to(torch.float32)
 
-        state = jnp.expand_dims(
-            state_to_unnormalized_tcoords(
-                evader_state, persuer_states, t=self.dataset_state.t_max
-            ),
-            0,
-        )
         return state
 
     def theta_to_cos_sin(self, state):
@@ -446,15 +450,14 @@ if __name__ in "__main__":
     # def make_env():
     #     def thunk():
     #         return gym.make('Safe-Air9D-v0', n=2, use_hj=True, deepreach_backend=True)
-
     #     return thunk
     # envs = gym.vector.SyncVectorEnv([make_env()])
     # breakpoint()
     # import wandb
     # wandb.init(monitor_gym=True)
-    env = gym.make("Safe-Air3D-v0", use_hj=True, render_mode='human')
-    from atu3.wrappers import RecordCollisions
-    env = RecordCollisions(env)
+    env = gym.make("Safe-Air6D-v0")
+    # from atu3.wrappers import RecordCollisions
+    # env = RecordCollisions(env)
     # env = gym.wrappers.RecordVideo(env, video_folder="./videos/")
     # env = gym.make("CartPole-v1")
     # env = Air3DNpEnv(1, use_hj=False, deepreach_backend=False)

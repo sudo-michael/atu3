@@ -4,7 +4,7 @@ import numpy as np
 import time
 
 
-class DubinsCar:
+class DynDubinsCar:
     def __init__(
         self,
         x=np.array([0, 0, 0]),

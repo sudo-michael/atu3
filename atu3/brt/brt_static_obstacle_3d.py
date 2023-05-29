@@ -1,5 +1,5 @@
 import numpy as np
-from atu3.dynamics.DubinsCar import DubinsCar
+from atu3.dynamics.DubinsCar import DynDubinsCar
 from odp.Grid.GridProcessing import Grid
 
 g = Grid(
@@ -10,8 +10,8 @@ g = Grid(
     [2],
 )
 car_r = 0.5
-car_brt = DubinsCar(r=car_r, uMode="max", dMode="min", speed=0.22, wMax=2.84)
-car_brat = DubinsCar(r=car_r, uMode="min", dMode="max", speed=0.22, wMax=2.84)
+car_brt = DynDubinsCar(r=car_r, uMode="max", dMode="min", speed=0.22, wMax=2.84)
+car_brat = DynDubinsCar(r=car_r, uMode="min", dMode="max", speed=0.22, wMax=2.84)
 obstacle_r = 0.5
 goal_r = 0.3
 cylinder_r = car_r + obstacle_r

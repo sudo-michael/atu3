@@ -18,7 +18,7 @@ custom_cfgs = {
         'update_iters': 1,
     },
     'logger_cfgs': {
-        'use_wandb': True,
+        'use_wandb': False,
         'wandb_project': 'atu3',
     },
     'lagrange_cfgs': {

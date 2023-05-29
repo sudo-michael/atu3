@@ -57,7 +57,8 @@ class OmniSafeAir3DEnv(CMDP):
             # set healthy_reward=0.0 for removing the safety constraint in reward
             env = gymnasium.make(id=env_id, render_mode="rgb_array", **kwargs)
             env = RecordCollisions(env)
-            env = gymnasium.wrappers.RecordVideo(env, f"videos/{now}")
+            # This will take too long, let's just trust the process
+            # env = gymnasium.wrappers.RecordVideo(env, f"videos/{now}")
             self._env = Gymnasium2SafetyGymnasium(env)
             assert isinstance(self._env.action_space, Box), 'Only support Box action space.'
             assert isinstance(

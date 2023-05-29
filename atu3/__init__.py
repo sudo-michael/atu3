@@ -38,7 +38,7 @@ register(
 register(
     id="Safe-Air6D-v0",
     entry_point="atu3.envs:Air3DNpEnv",
-    kwargs={"n": 2, "use_hj": True, 'deepreach_backend': True},
+    kwargs={"n": 2, "use_hj": True, 'deepreach_backend': True, 'ham_cost': True},
     max_episode_steps=450,
 )
 

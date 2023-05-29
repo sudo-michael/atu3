@@ -23,7 +23,7 @@ class Air3DNpEnv(gym.Env):
     }
 
     def __init__(
-        self, render_mode=None, n=1, use_hj=False, deepreach_backend=False
+        self, render_mode=None, n=1, use_hj=False, deepreach_backend=False, ham_cost=False
     ) -> None:
         self.render_mode = render_mode
         self.car = car_brt
@@ -32,6 +32,7 @@ class Air3DNpEnv(gym.Env):
         self.dt = 0.05
         self.use_hj = use_hj
         self.deepreach_backend = deepreach_backend
+        self.ham_cost = ham_cost
         if self.deepreach_backend:
             assert n == 2
             self.deepreach = DeepReachBackend()
@@ -78,12 +79,16 @@ class Air3DNpEnv(gym.Env):
         info["used_hj"] = False
         info["collision"] = False
 
-        if self.deepreach_backend:
+        if self.deepreach_backend and self.ham_cost:
             unnormalized_tcoords = self.deepreach_state(
                 self.evader_state, self.persuer_states
             )
-            value = self.deepreach.V(unnormalized_tcoords)
-            # print(f"Value: {value}")
+            # add min to not reward max hamiltonian
+            ham = min(self.deepreach.ham(unnormalized_tcoords, action), 0)
+            # ham will always be non-positive
+            info['cost'] = -ham
+        else:
+            info["cost"] = 0
 
         if self.use_hj and self.use_opt_ctrl():
             action = self.opt_ctrl()
@@ -122,7 +127,6 @@ class Air3DNpEnv(gym.Env):
         reward = -dist_to_goal
         terminated = False
 
-        info["cost"] = 0
 
         if (
             np.linalg.norm(self.evader_state[:2] - self.goal_location)
@@ -255,61 +259,61 @@ class Air3DNpEnv(gym.Env):
                 levels=[0.1],
             )
 
-        if self.deepreach_backend:
-            # Get the meshgrid in the (x, y) coordinate
-            grid_points = 200
-            mgrid_coords = xy_grid(
-                200,
-                x_max=self.dataset_state.alpha["x"],
-                y_max=self.dataset_state.alpha["y"],
-            )
-            ones = jnp.ones((mgrid_coords.shape[0], 1))
-            unnormalized_tcoords = jnp.concatenate(
-                (
-                    self.dataset_state.t_max * ones,
-                    mgrid_coords,
-                    self.persuer_states[0][0] * ones,
-                    self.persuer_states[0][1] * ones,
-                    self.persuer_states[1][0] * ones,
-                    self.persuer_states[1][1] * ones,
-                    self.evader_state[2] * ones,
-                    self.persuer_states[0][2] * ones,
-                    self.persuer_states[1][2] * ones,
-                ),
-                axis=1,
-            )
-            V = self.value_fn(unnormalized_tcoords)
+        # if self.deepreach_backend:
+        #     # Get the meshgrid in the (x, y) coordinate
+        #     grid_points = 200
+        #     mgrid_coords = xy_grid(
+        #         200,
+        #         x_max=self.dataset_state.alpha["x"],
+        #         y_max=self.dataset_state.alpha["y"],
+        #     )
+        #     ones = jnp.ones((mgrid_coords.shape[0], 1))
+        #     unnormalized_tcoords = jnp.concatenate(
+        #         (
+        #             self.dataset_state.t_max * ones,
+        #             mgrid_coords,
+        #             self.persuer_states[0][0] * ones,
+        #             self.persuer_states[0][1] * ones,
+        #             self.persuer_states[1][0] * ones,
+        #             self.persuer_states[1][1] * ones,
+        #             self.evader_state[2] * ones,
+        #             self.persuer_states[0][2] * ones,
+        #             self.persuer_states[1][2] * ones,
+        #         ),
+        #         axis=1,
+        #     )
+        #     V = self.value_fn(unnormalized_tcoords)
 
-            V = np.array(V)
-            V = V.reshape((grid_points, grid_points))
+        #     V = np.array(V)
+        #     V = V.reshape((grid_points, grid_points))
 
-            # unnormalize value function
-            V = (
-                V * self.dataset_state.var
-            ) / self.dataset_state.norm_to + self.dataset_state.mean
+        #     # unnormalize value function
+        #     V = (
+        #         V * self.dataset_state.var
+        #     ) / self.dataset_state.norm_to + self.dataset_state.mean
 
-            V = (V <= 0.001) * 1.0
+        #     V = (V <= 0.001) * 1.0
 
-            X, Y = np.meshgrid(
-                np.linspace(
-                    -self.dataset_state.alpha["x"],
-                    self.dataset_state.alpha["x"],
-                    grid_points,
-                ),
-                np.linspace(
-                    -self.dataset_state.alpha["y"],
-                    self.dataset_state.alpha["y"],
-                    grid_points,
-                ),
-                indexing="ij",
-            )
+        #     X, Y = np.meshgrid(
+        #         np.linspace(
+        #             -self.dataset_state.alpha["x"],
+        #             self.dataset_state.alpha["x"],
+        #             grid_points,
+        #         ),
+        #         np.linspace(
+        #             -self.dataset_state.alpha["y"],
+        #             self.dataset_state.alpha["y"],
+        #             grid_points,
+        #         ),
+        #         indexing="ij",
+        #     )
 
-            self.ax.contour(
-                X,
-                Y,
-                V,
-                levels=[0.1],
-            )
+        #     self.ax.contour(
+        #         X,
+        #         Y,
+        #         V,
+        #         levels=[0.1],
+        #     )
 
         self.ax.set_xlim(-5, 5)
         self.ax.set_ylim(-5, 5)
@@ -464,12 +468,15 @@ if __name__ in "__main__":
     obs, info = env.reset()
     done = False
     t = 0
+    c = 0
     for t in range(int(1e5)):
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
-
+        c += info['cost']
         done = terminated or truncated
         if done:
+            print(c)
+            c = 0
             print(info)
             obs, info = env.reset()
 

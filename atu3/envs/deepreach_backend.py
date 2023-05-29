@@ -64,7 +64,7 @@ class DeepReachBackend:
 
         return opt_ctrl.detach().cpu(), opt_dstb.detach().cpu() # (1, 1), # (1, 2)
 
-    def ham(self, state):
+    def ham(self, state, action):
         model_results = self.model(
             {"coords": self.dynamics.coord_to_input(state.cuda())}
         )
@@ -73,7 +73,7 @@ class DeepReachBackend:
             model_results["model_out"].squeeze(dim=-1),
         )
 
-        ham = self.dynamics.hamiltonian(state[:, 1:].cuda(), dvs[..., 1:].cuda())
+        ham = self.dynamics.agent_hamiltonian(state[:, 1:].cuda(), dvs[..., 1:].cuda(), action)
 
         return ham.item() # scalar
 

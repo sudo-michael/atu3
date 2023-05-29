@@ -878,6 +878,32 @@ class MultiVehicleCollision(Dynamics):
 
         return ham
 
+    def agent_hamiltonian(self, state, dvds, ctrl):
+        # ctrl: scalar
+        # Compute the hamiltonian for the ego vehicle
+        # see Dubins3d avoid
+        ham = self.velocity_e * (
+            torch.cos(state[..., 6]) * dvds[..., 0]
+            + torch.sin(state[..., 6]) * dvds[..., 1]
+        ) + ctrl.item() * dvds[..., 6]
+
+        # see Dubins3d reach
+        # persuer 1
+        ham_local = self.velocity_p * (
+            torch.cos(state[..., 7]) * dvds[..., 2]
+            + torch.sin(state[..., 7]) * dvds[..., 3]
+        ) - self.omega_max * torch.abs(dvds[..., 7])
+        ham += ham_local
+
+        # persuer 2
+        ham_local = self.velocity_p * (
+            torch.cos(state[..., 8]) * dvds[..., 4]
+            + torch.sin(state[..., 8]) * dvds[..., 5]
+        ) - self.omega_max * torch.abs(dvds[..., 8])
+        ham += ham_local
+
+        return ham
+
     def optimal_control(self, state, dvds):
         # evader control
         return self.omega_max * torch.sign(dvds[..., [6]])  # (b, 3)

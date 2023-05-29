@@ -5,7 +5,7 @@ import gymnasium as gym
 import atu3
 
 from atu3.envs.omnisafe_air_3d_Np import OmniSafeAir3DEnv
-env_id = "Safe-Air3D-v0"
+env_id = "Safe-Air6D-v0"
 
 custom_cfgs = {
     'train_cfgs': {
@@ -18,7 +18,7 @@ custom_cfgs = {
         'update_iters': 1,
     },
     'logger_cfgs': {
-        'use_wandb': False,
+        'use_wandb': True,
         'wandb_project': 'atu3',
     },
     'lagrange_cfgs': {

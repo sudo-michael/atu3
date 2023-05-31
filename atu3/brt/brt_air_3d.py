@@ -16,7 +16,7 @@ car_r = 0.1
 # NOTE ve != vp otherwise evader cannot excape persuer
 # NOTE why is we_max different than wp_max?
 #      think i'm just doing it for the sake of it, maybe remove it works fine
-car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.00, ve=0.22, vp=0.14)
+car_brt = Air3D(r=car_r, u_mode="max", d_mode="min", we_max=2.84, wp_max=2.00, ve=0.22, vp=0.15)
 persuer_backup_brt = DubinsCar(x=[0, 0, 0], uMode='min', wMax=car_brt.wp_max, speed=car_brt.vp)
 cylinder_r = car_r + car_r # could this be smaller?
 

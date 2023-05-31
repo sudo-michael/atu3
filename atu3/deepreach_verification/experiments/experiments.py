@@ -65,7 +65,6 @@ class Experiment(ABC):
                 coords[:, 1 + plot_config['x_axis_idx']] = xys[:, 0]
                 coords[:, 1 + plot_config['y_axis_idx']] = xys[:, 1]
                 coords[:, 1 + plot_config['z_axis_idx']] = zs[j]
-                breakpoint()
 
                 with torch.no_grad():
                     model_results = self.model({'coords': self.dataset.dynamics.coord_to_input(coords.cuda())})

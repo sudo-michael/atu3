@@ -739,7 +739,7 @@ class MultiVehicleCollision(Dynamics):
     def __init__(self, diff_model):
         self.set_mode = "avoid"
         self.angle_alpha_factor = 1.2
-        self.velocity_p = 0.11
+        self.velocity_p = 0.15
         self.velocity_e = 0.22
         self.omega_max = 2.84
         self.collisionR = 0.25

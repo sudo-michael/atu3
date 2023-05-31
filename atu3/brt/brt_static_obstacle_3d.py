@@ -13,7 +13,7 @@ car_r = 0.5
 car_brt = DynDubinsCar(r=car_r, uMode="max", dMode="min", speed=0.22, wMax=2.84)
 car_brat = DynDubinsCar(r=car_r, uMode="min", dMode="max", speed=0.22, wMax=2.84)
 obstacle_r = 0.5
-goal_r = 0.3
+goal_r = 0.2
 cylinder_r = car_r + obstacle_r
 
 if __name__ in "__main__":

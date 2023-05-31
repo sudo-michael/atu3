@@ -23,16 +23,15 @@ class Air3DNpEnv(gym.Env):
     }
 
     def __init__(
-        self, render_mode=None, n=1, use_hj=False, deepreach_backend=False, ham_cost=False
+        self, render_mode=None, n=1, use_hj=False, deepreach_backend=False, ham_cost=False, hj_cost = False
     ) -> None:
         self.render_mode = render_mode
         self.car = car_brt
-        # NOTE: let's try making the persuer slower since optimal disturbance makes it hard for the evader to escape
-        self.car.vp = 0.21
         self.dt = 0.05
         self.use_hj = use_hj
         self.deepreach_backend = deepreach_backend
         self.ham_cost = ham_cost
+        self.hj_cost = True
         if self.deepreach_backend:
             assert n == 2
             self.deepreach = DeepReachBackend()
@@ -56,6 +55,7 @@ class Air3DNpEnv(gym.Env):
         self.evader_state = np.array([1.0, 1.0, np.pi / 4])
         self.goal_location = np.array([1.5, 1.5])
         self.goal_r = goal_r
+        self.persuer_captured_evader = True
 
         self.world_boundary = np.array([4.5, 4.5, np.pi], dtype=np.float32)
 
@@ -93,6 +93,8 @@ class Air3DNpEnv(gym.Env):
         if self.use_hj and self.use_opt_ctrl():
             action = self.opt_ctrl()
             info["used_hj"] = True
+            if self.hj_cost:
+                info['cost'] = 1.0
 
         self.evader_state = (
             self.car.dynamics_non_hcl(0, self.evader_state, action) * self.dt
@@ -142,8 +144,11 @@ class Air3DNpEnv(gym.Env):
             ]
         ):
             terminated = True
-            info["cost"] = 1.0
+            if not (self.hj_cost or self.ham_cost):
+                info["cost"] = 1.0
             info["collision"] = "persuer"
+
+            self.persuer_captured_evader = True
 
         if self.render_mode == "human":
             self.render()
@@ -161,38 +166,41 @@ class Air3DNpEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
 
-        # DEBUG: the following cases show when the brt is not working
-        # works
-        # self.evader_state = np.array([0.0, 0.0, 0.0])
-        # self.persuer_states[0] = np.array([1.0, 0.3, -np.pi])
-        # doesn't
-        # self.persuer_states[1] = np.array([-1.0, -0.3, 0.0])
-        # self.persuer_states[0] = np.array([0.5, -0.3, -np.pi])
-        # self.persuer_states[0] = np.array([1.0, -0.0, -np.pi])
-        # self.persuer_states[1] = np.array([-1.0, -0.0, 0.0])
-        goal_locations = [
-            np.array([1.5, 1.5]),
-            np.array([0, 1.5]),
-            np.array([-1.5, 1.5]),
-            np.array([1.5, 0]),
-            np.array([1.5, -1.5]),
-        ]
+        
 
-        random_idx = np.random.randint(0, len(goal_locations))
-        self.goal_location = goal_locations[random_idx]
-
-        self.evader_state = np.random.uniform(
-            low=np.array([-0.75, -0.75, -np.pi]),
-            high=np.array([0.75, 0.75, np.pi]),
+        self.goal_location = np.random.uniform(
+            low=np.array([-1.5, -1.5]),
+            high=np.array([1.5, 1.5]),
         )
+        
 
-        for i in range(self.n):
-            self.persuer_states[i] = np.random.uniform(
-                low=-self.world_boundary, high=self.world_boundary
+        # goal_locations = [
+        #     np.array([1.5, 1.5]),
+        #     np.array([0, 1.5]),
+        #     np.array([-1.5, 1.5]),
+        #     np.array([1.5, 0]),
+        #     np.array([1.5, -1.5]),
+        # ]
+
+        # random_idx = np.random.randint(0, len(goal_locations))
+        # self.goal_location = goal_locations[random_idx]
+
+
+        if self.persuer_captured_evader:
+            self.evader_state = np.random.uniform(
+                low=np.array([-2.0, -2.0, -np.pi]),
+                high=np.array([2.0, 2.0, np.pi]),
+            )
+            
+            self.goal_location = self.evader_state[:2] + 0.5
+
+            for i in range(self.n):
+                self.persuer_states[i] = np.random.uniform(
+                low=np.array([-2.0, -2.0, -np.pi]),
+                high=np.array([2.0, 2.0, np.pi]),
             )
 
-            # insert the persuer between the goal and the evader
-            self.persuer_states[i][:2] = goal_locations[random_idx] // 2
+            self.persuer_captured_evader = False
 
         info = {}
         info["cost"] = 0
@@ -460,6 +468,9 @@ if __name__ in "__main__":
     # import wandb
     # wandb.init(monitor_gym=True)
     env = gym.make("Safe-Air6D-v0")
+    def thunk():
+        return gym.make("Safe-Air6D-v0")
+
     # from atu3.wrappers import RecordCollisions
     # env = RecordCollisions(env)
     # env = gym.wrappers.RecordVideo(env, video_folder="./videos/")

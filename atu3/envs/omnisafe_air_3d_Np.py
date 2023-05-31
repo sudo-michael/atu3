@@ -15,6 +15,7 @@ from safety_gymnasium.wrappers import Gymnasium2SafetyGymnasium
 
 
 from atu3.wrappers import RecordCollisions
+
 @env_register
 class OmniSafeAir3DEnv(CMDP):
     """Gymnasium Mujoco environment.
@@ -28,6 +29,7 @@ class OmniSafeAir3DEnv(CMDP):
     _support_envs = [
         'Safe-Air3D-v0',
         'Safe-Air6D-v0',
+        'Safe-Air6D-hj-cost-v0',
     ]
 
     need_auto_reset_wrapper = True
@@ -55,7 +57,7 @@ class OmniSafeAir3DEnv(CMDP):
         now = now.strftime("%Y-%m-%d_%H-%M-%S")
         if num_envs == 1:
             # set healthy_reward=0.0 for removing the safety constraint in reward
-            env = gymnasium.make(id=env_id, render_mode="rgb_array", **kwargs)
+            env = gymnasium.make(id=env_id, **kwargs)
             env = RecordCollisions(env)
             # This will take too long, let's just trust the process
             # env = gymnasium.wrappers.RecordVideo(env, f"videos/{now}")

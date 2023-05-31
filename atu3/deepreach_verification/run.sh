@@ -1,9 +1,9 @@
 #!/bin/bash
 
 python run_experiment.py \
-    --mode='plot' \
+    --mode='train' \
     --experiment_class='VerifyDeepReach' \
-    --experiment_name='atu_multivehiclecollisionavoidtube_2' \
+    --experiment_name='atu_multivehiclecollisionavoidtube_3' \
     --minWith='target' \
     --dynamics_class='MultiVehicleCollision' \
     --adj_rel_grads=True --diff_model=False \

@@ -3,9 +3,9 @@
 python run_experiment.py \
     --mode='train' \
     --experiment_class='VerifyDeepReach' \
-    --experiment_name='atu_multivehiclecollisionavoidtube_3' \
+    --experiment_name='atu_multivehiclecollisionavoidtube_with_dstb' \
     --minWith='target' \
-    --dynamics_class='MultiVehicleCollision' \
+    --dynamics_class='MultiVehicleCollisionDstb' \
     --adj_rel_grads=True --diff_model=False \
     --seed=0 \
     --batch_size=1 \

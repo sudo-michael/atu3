@@ -940,3 +940,214 @@ class MultiVehicleCollision(Dynamics):
             "y_axis_idx": 1,
             "z_axis_idx": 6,
         }
+
+class MultiVehicleCollisionDstb(Dynamics):
+    def __init__(self, diff_model):
+        self.set_mode = "avoid"
+        self.angle_alpha_factor = 1.2
+        self.velocity_p = 0.11
+        self.velocity_e = 0.22
+        self.omega_max = 2.84
+        self.collisionR = 0.25
+        self.state_error = 0.03
+        super().__init__(
+            state_dim=9,
+            input_dim=10,
+            control_dim=1,
+            disturbance_dim=11,
+            state_mean=[
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            state_var=[
+                5, # x_e
+                5, # y_e
+                5, # x_p1
+                5, # y_p1
+                5, # x_p2
+                5, # y_p2
+                self.angle_alpha_factor * math.pi, # theta_e
+                self.angle_alpha_factor * math.pi, # theta_p1
+                self.angle_alpha_factor * math.pi, # theta_p2
+            ],
+            value_mean=0.25,
+            value_var=0.5,
+            value_normto=0.02,
+            diff_model=diff_model,
+        )
+
+    def state_test_range(self):
+        return [
+            [-2, 2],
+            [-2, 2],
+            [-2, 2],
+            [-2, 2],
+            [-2, 2],
+            [-2, 2],
+            [-math.pi, math.pi],
+            [-math.pi, math.pi],
+            [-math.pi, math.pi],
+        ]
+
+    def equivalent_wrapped_state(self, state):
+        wrapped_state = torch.clone(state)
+        # maps in range [-pi, pi]
+        wrapped_state[..., 6] = (wrapped_state[..., 6] + math.pi) % (
+            2 * math.pi
+        ) - math.pi
+        wrapped_state[..., 7] = (wrapped_state[..., 7] + math.pi) % (
+            2 * math.pi
+        ) - math.pi
+        wrapped_state[..., 8] = (wrapped_state[..., 8] + math.pi) % (
+            2 * math.pi
+        ) - math.pi
+        return wrapped_state
+
+    # dynamics (per car)
+    # \dot x    = v \cos \theta
+    # \dot y    = v \sin \theta
+    # \dot \theta = u
+    def dsdt(self, state, control, disturbance):
+        dsdt = torch.zeros_like(state)
+        dsdt[..., 0] = self.velocity_e * torch.cos(state[..., 6])  + disturbance[..., 2] # x_e 
+        dsdt[..., 1] = self.velocity_e * torch.sin(state[..., 6])  + disturbance[..., 3]# y_e
+        dsdt[..., 2] = self.velocity_p * torch.cos(state[..., 7])  + disturbance[..., 4]# x_p1
+        dsdt[..., 3] = self.velocity_p * torch.sin(state[..., 7])  + disturbance[..., 5]# y_p1
+        dsdt[..., 4] = self.velocity_p * torch.cos(state[..., 8])  + disturbance[..., 6]# x_p2
+        dsdt[..., 5] = self.velocity_p * torch.sin(state[..., 8])  + disturbance[..., 7]# y_p2
+        dsdt[..., 6] = control[..., 0]  + disturbance[..., 8] # e
+        dsdt[..., 7] = disturbance[..., 0]  + disturbance[..., 9] # p1
+        dsdt[..., 8] = disturbance[..., 1]  + disturbance[..., 10] # p2
+        return dsdt
+
+    def boundary_fn(self, state):
+        boundary_values = (
+            torch.norm(state[..., 0:2] - state[..., 2:4], dim=-1) - self.collisionR
+        )
+        for i in range(1, 2):
+            boundary_values_current = (
+                torch.norm(
+                    state[..., 0:2] - state[..., 2 * (i + 1) : 2 * (i + 1) + 2], dim=-1
+                )
+                - self.collisionR
+            )
+            boundary_values = torch.min(boundary_values, boundary_values_current)
+
+        # # Collision cost between the evaders themselves
+        # for i in range(2):
+        #     for j in range(i + 1, 2):
+        #         evader1_coords_index = (i + 1) * 2
+        #         evader2_coords_index = (j + 1) * 2
+        #         boundary_values_current = (
+        #             torch.norm(
+        #                 state[..., evader1_coords_index : evader1_coords_index + 2]
+        #                 - state[..., evader2_coords_index : evader2_coords_index + 2],
+        #                 dim=-1,
+        #             )
+        #             - self.collisionR
+        #         )
+        #         boundary_values = torch.min(boundary_values, boundary_values_current)
+        return boundary_values 
+
+    def cost_fn(self, state_traj):
+        return torch.min(self.boundary_fn(state_traj), dim=-1).values
+
+    def hamiltonian(self, state, dvds):
+        # Compute the hamiltonian for the ego vehicle
+        # see Dubins3d avoid
+        ham = self.velocity_e * (
+            torch.cos(state[..., 6]) * dvds[..., 0]
+            + torch.sin(state[..., 6]) * dvds[..., 1]
+        ) + self.omega_max * torch.abs(dvds[..., 6])
+
+        # see Dubins3d reach
+        # persuer 1
+        ham_local = self.velocity_p * (
+            torch.cos(state[..., 7]) * dvds[..., 2]
+            + torch.sin(state[..., 7]) * dvds[..., 3]
+        ) - self.omega_max * torch.abs(dvds[..., 7])
+        ham += ham_local
+
+        # persuer 2
+        ham_local = self.velocity_p * (
+            torch.cos(state[..., 8]) * dvds[..., 4]
+            + torch.sin(state[..., 8]) * dvds[..., 5]
+        ) - self.omega_max * torch.abs(dvds[..., 8])
+        ham += ham_local
+
+        return ham
+
+    def agent_hamiltonian(self, state, dvds, ctrl):
+        # ctrl: scalar
+        # Compute the hamiltonian for the ego vehicle
+        # see Dubins3d avoid
+        ham = self.velocity_e * (
+            torch.cos(state[..., 6]) * dvds[..., 0]
+            + torch.sin(state[..., 6]) * dvds[..., 1]
+        ) + ctrl.item() * dvds[..., 6]
+
+        # see Dubins3d reach
+        # persuer 1
+        ham_local = self.velocity_p * (
+            torch.cos(state[..., 7]) * dvds[..., 2]
+            + torch.sin(state[..., 7]) * dvds[..., 3]
+        ) - self.omega_max * torch.abs(dvds[..., 7])
+        ham += ham_local
+
+        # persuer 2
+        ham_local = self.velocity_p * (
+            torch.cos(state[..., 8]) * dvds[..., 4]
+            + torch.sin(state[..., 8]) * dvds[..., 5]
+        ) - self.omega_max * torch.abs(dvds[..., 8])
+        ham += ham_local
+
+        ham += -self.state_error * torch.abs(dvds[..., [[0, 1, 2, 3, 4, 5, 6, 7, 8]]]).sum(dim=-1)
+
+        return ham
+
+    def optimal_control(self, state, dvds):
+        # evader control
+        return self.omega_max * torch.sign(dvds[..., [6]])  # (b, 3)
+
+    def optimal_disturbance(self, state, dvds):
+        # persuer contorl
+        persuer_control = -self.omega_max * torch.sign(dvds[..., [7, 8]])
+        state_error = -self.state_error * torch.sign(dvds[[..., [0, 1, 2, 3, 4, 5]]])
+
+        return torch.cat((persuer_control, state_error), dim=-1)
+
+    def plot_config(self):
+        return {
+            "state_slices": [
+                0,
+                0,
+                -1.0,
+                0,
+                1.0,
+                0,
+                math.pi / 2,
+                0,
+                -math.pi,
+            ],
+            "state_labels": [
+                r"$x_1$",
+                r"$y_1$",
+                r"$x_2$",
+                r"$y_2$",
+                r"$x_3$",
+                r"$y_3$",
+                r"$\theta_1$",
+                r"$\theta_2$",
+                r"$\theta_3$",
+            ],
+            "x_axis_idx": 0,
+            "y_axis_idx": 1,
+            "z_axis_idx": 6,
+        }
